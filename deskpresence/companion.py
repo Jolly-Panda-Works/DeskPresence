@@ -210,6 +210,20 @@ class Companion:
                 "lan": [f"{a}:{self.port}" for a in local_addresses()[:3]],
                 "hub": self.cfg["mobile"].get("hub_id", ""), "relay": self.cfg["mobile"].get("relay_url", "")}
 
+    def pairing_link(self, code):
+        """Link / QR content for a pairing code. Secrets go after "#", which never reaches a server."""
+        from urllib.parse import urlencode
+        from .network import local_addresses
+        mobile = self.cfg["mobile"]
+        params = {"c": code, "k": e2e.fingerprint(e2e.public_b64(self.identity)), "f": self.fingerprint[:16]}
+        lan = local_addresses()
+        if lan:
+            params["l"] = f"{lan[0]}:{self.port}"
+        if mobile.get("relay_url"):
+            params["h"] = mobile["hub_id"]
+            return mobile["relay_url"].rstrip("/") + "/p/#" + urlencode(params)
+        return "deskpresence://pair?" + urlencode(params)
+
     def device_key(self, device_id):
         """The end-to-end key shared with one phone (None for phones paired without a key)."""
         device = self.cfg["mobile"]["devices"].get(device_id)

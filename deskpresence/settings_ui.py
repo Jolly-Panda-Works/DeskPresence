@@ -504,6 +504,11 @@ class SettingsWindow:
                   hint=t("set.mobile_address_hint"))
         self._switch(c, t("set.allow_camera"), "mobile.allow_camera", hint=t("set.allow_camera_hint"))
         self._info(c, t("set.today"), "mobile_today")
+        self._end(c)
+
+        c = self._card(t("set.remote"), t("set.remote_hint"))
+        self._entry(c, t("set.relay_url"), "mobile.relay_url", width=300, hint=t("set.relay_url_hint"))
+        self._info(c, t("set.relay_state"), "relay_state")
         if self.cfg["role"] == "desktop":
             self._info(c, t("set.firewall"), "firewall", hint=t("set.firewall_hint"))
             self._row(c, "", lambda p: self._ghost(p, t("set.firewall_allow"), self._allow_firewall, width=220))
@@ -515,6 +520,11 @@ class SettingsWindow:
         self.code_lbl = self._row(c, t("set.code"), lambda p: ctk.CTkLabel(
             p, text=t("set.code_none"), font=ctk.CTkFont(family=FONT, size=30, weight="bold"), text_color=ORANGE))
         self._info(c, "", "code_left")
+        self.qr_lbl = self._row(c, t("set.qr"), lambda p: ctk.CTkLabel(
+            p, text="", width=200, height=200, fg_color=FIELD, corner_radius=12), hint=t("set.qr_hint"))
+        self._row(c, t("set.link"), lambda p: self._ghost(p, t("set.copy_link"), self._copy_link, width=170),
+                  hint=t("set.link_hint"))
+        self._qr_for = None
         self._end(c)
 
         c = self._card(t("set.devices"))
@@ -557,6 +567,31 @@ class SettingsWindow:
             return box
         self._row(card, "📱 " + device.get("name", "?"), make,
                   hint=t("set.device_seen", when=self._ago(device.get("last_seen", 0))))
+
+    def _copy_link(self):
+        comp = self.ctrl.companion
+        code, _left = comp.code() if comp else (None, 0)
+        if not code:
+            self._flash(t("set.make_code_first"), color=ORANGE)
+            return
+        self.win.clipboard_clear()
+        self.win.clipboard_append(comp.pairing_link(code))
+        self._flash(t("set.copied"))
+
+    def _show_qr(self, text):
+        if getattr(self, "qr_lbl", None) is None or not self.qr_lbl.winfo_exists() or self._qr_for == text:
+            return
+        self._qr_for = text
+        if not text:
+            self.qr_img = None
+            self.qr_lbl.configure(image=None, text="")
+            return
+        import qrcode
+        qr = qrcode.QRCode(border=2, box_size=8, error_correction=qrcode.constants.ERROR_CORRECT_M)
+        qr.add_data(text)
+        img = qr.make_image(fill_color="#110D0A", back_color="#FFFFFF").get_image().convert("RGB")
+        self.qr_img = ctk.CTkImage(img, size=(200, 200))
+        self.qr_lbl.configure(image=self.qr_img, text="")
 
     def _remove_device(self, device_id):
         from . import companion
@@ -815,7 +850,17 @@ class SettingsWindow:
             today = ctrl.stats.today()
             h, m = divmod(today["work_seconds"] // 60, 60)
             self._set_live("mobile_today", t("set.today_stats", water=today["water"], hours=f"{h}:{m:02d}"))
+            relay = comp.relay if comp else None
+            if not self.cfg["mobile"].get("relay_url"):
+                self._set_live("relay_state", t("set.relay_none"), MUTED)
+            elif relay and relay.connected:
+                self._set_live("relay_state", t("set.relay_ok"), OK_GREEN)
+            elif relay and relay.error:
+                self._set_live("relay_state", t("set.link_error", err=relay.error[:60]), DANGER)
+            else:
+                self._set_live("relay_state", t("set.relay_connecting"), ORANGE)
             code, left = comp.code() if comp else (None, 0)
+            self._show_qr(comp.pairing_link(code) if code else None)
             if getattr(self, "code_lbl", None) is not None and self.code_lbl.winfo_exists():
                 self.code_lbl.configure(text=f"{code[:3]} {code[3:]}" if code else t("set.code_none"))
             self._set_live("code_left", t("set.code_left", m=left // 60, s=left % 60) if code else "", MUTED)
