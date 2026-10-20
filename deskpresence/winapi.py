@@ -83,6 +83,8 @@ def list_monitors():
 
 
 def pick_monitor(monitors, index):
+    if not monitors:  # e.g. a headless session
+        return Monitor(0, (0, 0, 1920, 1080), (0, 0, 1920, 1040), True, "")
     if 0 <= index < len(monitors):
         return monitors[index]
     return next((m for m in monitors if m.primary), monitors[0])
@@ -146,6 +148,10 @@ def monitors_on():
     user32.mouse_event(MOUSEEVENTF_MOVE, 0, 1, 0, 0)
     time.sleep(0.05)
     user32.mouse_event(MOUSEEVENTF_MOVE, 0, -1, 0, 0)
+
+
+def beep():
+    user32.MessageBeep(0x40)  # MB_ICONASTERISK
 
 
 def lock_workstation():

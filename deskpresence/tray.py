@@ -9,20 +9,27 @@ from PIL import Image, ImageDraw
 
 from . import APP_NAME, winapi
 from .config import APP_DIR, CONFIG_PATH
+from .i18n import LANGUAGES, language, set_language, t
 
 log = logging.getLogger(__name__)
 
 RUN_KEY = r"Software\Microsoft\Windows\CurrentVersion\Run"
-COLORS = {"present": "#2ecc71", "away": "#f39c12", "paused": "#7f8c8d", "error": "#e74c3c"}
+# status dot on the orange logo
+COLORS = {"present": "#4ADE80", "away": "#FBBF24", "break": "#60A5FA", "paused": "#A99B8E", "error": "#F87171"}
 
 
 def _icon(color):
-    img = Image.new("RGBA", (64, 64), (0, 0, 0, 0))
+    """The orange DeskPresence tile with a small status dot."""
+    size = 256
+    img = Image.new("RGBA", (size, size), (0, 0, 0, 0))
     d = ImageDraw.Draw(img)
-    d.ellipse((4, 4, 60, 60), fill=color)
-    d.ellipse((22, 14, 42, 34), fill="white")        # head
-    d.pieslice((14, 34, 50, 70), 180, 360, fill="white")  # shoulders
-    return img
+    d.rounded_rectangle((8, 8, size - 8, size - 8), radius=56, fill="#F97316")
+    d.ellipse((92, 46, 164, 118), fill="white")                     # head
+    d.rounded_rectangle((60, 128, 196, 230), radius=60, fill="white")  # shoulders
+    d.rectangle((60, 200, 196, 248), fill="#F97316")                # cut the bottom flat
+    d.ellipse((160, 160, 248, 248), fill="#110D0A")                 # status badge
+    d.ellipse((176, 176, 232, 232), fill=color)
+    return img.resize((64, 64), Image.LANCZOS)
 
 
 def _launch_command():
@@ -55,41 +62,60 @@ class Tray:
     def __init__(self, ctrl, cfg, ui):
         self.ctrl, self.cfg, self.ui = ctrl, cfg, ui
         I, M = pystray.MenuItem, pystray.Menu
+
+        def tr(key):  # menu text is evaluated each time the menu is rebuilt
+            return lambda _: t(key)
+
+        def lang_item(code):
+            return I(LANGUAGES[code], lambda: self._set_language(code), radio=True,
+                     checked=lambda _: language() == code)
+
+        cam = lambda _: ctrl.uses_camera  # noqa: E731
         menu = M(
             I(lambda _: self._status_text(), None, enabled=False),
             M.SEPARATOR,
-            I("توقف موقت", self._toggle_pause, checked=lambda _: ctrl.paused),
-            I("موس دنبال نگاه من بیاید", self._toggle_gaze, checked=lambda _: cfg["gaze_follow"],
-              visible=lambda _: ctrl.uses_camera),
-            I("کالیبره کردن نگاه…", lambda: ctrl.start_calibration(), visible=lambda _: ctrl.uses_camera),
-            I("تست: خاموش کردن مانیتورها", lambda: winapi.monitors_off()),
+            I(tr("menu.pause"), self._toggle_pause, checked=lambda _: ctrl.paused),
+            I(tr("menu.gaze"), self._toggle_gaze, checked=lambda _: cfg["gaze_follow"], visible=cam),
+            I(tr("menu.calibrate"), lambda: ctrl.start_calibration(), visible=cam),
+            I(tr("menu.break_now"), lambda: ctrl.start_break(),
+              visible=lambda _: ctrl.uses_camera and not ctrl.break_active),
+            I(tr("menu.break_end"), lambda: ctrl.end_break(skipped=True),
+              visible=lambda _: ctrl.uses_camera and ctrl.break_active),
+            I(tr("menu.test_off"), lambda: winapi.monitors_off()),
             M.SEPARATOR,
-            I("اجرا همراه ویندوز", self._toggle_autostart, checked=lambda _: autostart_enabled()),
-            I("ویرایش تنظیمات", lambda: os.startfile(CONFIG_PATH)),
-            I("اعمال تنظیمات ذخیره‌شده", self._reload),
-            I("پوشه برنامه و لاگ", lambda: os.startfile(APP_DIR)),
+            I(tr("menu.autostart"), self._toggle_autostart, checked=lambda _: autostart_enabled()),
+            I(tr("menu.language"), M(lang_item("fa"), lang_item("en"))),
+            I(tr("menu.settings"), lambda: os.startfile(CONFIG_PATH)),
+            I(tr("menu.reload"), self._reload),
+            I(tr("menu.folder"), lambda: os.startfile(APP_DIR)),
             M.SEPARATOR,
-            I("خروج", self._quit),
+            I(tr("menu.about"), lambda: ui.about()),
+            I(tr("menu.quit"), self._quit),
         )
         self.icon = pystray.Icon(APP_NAME, _icon(COLORS["present"]), APP_NAME, menu)
 
     def _status_text(self):
-        role = "کامپیوتر" if self.ctrl.role == "desktop" else "لپ‌تاپ"
-        text = f"{role}: {self.ctrl.status}"
+        text = f"{t('role.' + self.ctrl.role)}: {t('status.' + self.ctrl.status)}"
+        mins = self.ctrl.next_break_minutes()
+        if mins is not None and not self.ctrl.break_active:
+            text += "  •  " + t("status.next_break", mins=mins)
         if self.cfg["network_enabled"]:
-            text += "  •  اتصال: " + ("برقرار" if self.ctrl.peer_connected else "قطع")
+            state = t("status.link_on") if self.ctrl.peer_connected else t("status.link_off")
+            text += "  •  " + t("status.link", state=state)
         return text
 
     def refresh(self):
         if self.ctrl.paused:
             key = "paused"
-        elif self.ctrl.status.startswith("خطا"):
+        elif self.ctrl.status == "camera_error":
             key = "error"
+        elif self.ctrl.break_active:
+            key = "break"
         else:
             key = self.ctrl.state
         try:
             self.icon.icon = _icon(COLORS.get(key, COLORS["present"]))
-            self.icon.title = f"{APP_NAME} - {self.ctrl.status}"
+            self.icon.title = f"{APP_NAME} - {t('status.' + self.ctrl.status)}"
             self.icon.update_menu()
         except Exception:
             pass
@@ -112,10 +138,16 @@ class Tray:
     def _toggle_autostart(self):
         set_autostart(not autostart_enabled())
 
+    def _set_language(self, code):
+        self.cfg.set("language", code)
+        set_language(code)
+        self.refresh()
+
     def _reload(self):
         self.ctrl.reload()
-        self.ctrl.popup("تنظیمات اعمال شد",
-                        "تغییر role یا تنظیمات شبکه بعد از بستن و باز کردن دوباره برنامه اعمال می‌شود.")
+        set_language(self.cfg["language"])
+        self.refresh()
+        self.ctrl.popup(t("reload.title"), t("reload.body"))
 
     def _quit(self):
         self.ctrl.stop()

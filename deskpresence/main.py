@@ -3,8 +3,9 @@ import logging
 import sys
 from logging.handlers import RotatingFileHandler
 
-from . import APP_NAME, __version__, winapi
+from . import APP_NAME, APP_VERSION, winapi
 from .config import LOG_PATH, Config
+from .i18n import set_language, t
 
 
 def _setup_logging():
@@ -17,14 +18,15 @@ def _setup_logging():
 
 def main():
     winapi.set_dpi_aware()
+    cfg = Config()
+    set_language(cfg["language"])
     if not winapi.acquire_single_instance(APP_NAME):
-        ctypes.windll.user32.MessageBoxW(None, "DeskPresence در حال اجراست (آیکون کنار ساعت).", APP_NAME, 0x40)
+        ctypes.windll.user32.MessageBoxW(None, t("app.running"), APP_NAME, 0x40)
         return
 
-    cfg = Config()
     _setup_logging()
     log = logging.getLogger(APP_NAME)
-    log.info("Starting %s %s as %s", APP_NAME, __version__, cfg["role"])
+    log.info("Starting %s %s as %s", APP_NAME, APP_VERSION, cfg["role"])
 
     # imported late so logging is ready before heavy modules load
     from .controller import Controller
@@ -39,8 +41,7 @@ def main():
     tray.start()
 
     if cfg["role"] == "desktop" and len(cfg["calibration"]) < 2 and len(winapi.list_monitors()) > 1:
-        ctrl.popup("DeskPresence فعال شد",
-                   "برای اینکه موس دنبال نگاهتان بیاید، از منوی آیکون کنار ساعت «کالیبره کردن نگاه» را بزنید.")
+        ctrl.popup(t("welcome.title"), t("welcome.body"))
 
     try:
         ui.run()

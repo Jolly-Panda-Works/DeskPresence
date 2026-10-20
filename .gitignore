@@ -1,7 +1,12 @@
 __pycache__/
 *.pyc
+.pytest_cache/
 build/
 dist/
 *.spec
 assets/*.onnx
 .venv/
+# written by tools/set_version.py at build time
+deskpresence/_build_version.py
+version_info.txt
+SHA256SUMS.txt

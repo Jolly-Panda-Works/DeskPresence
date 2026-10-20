@@ -16,6 +16,7 @@ LOG_PATH = os.path.join(APP_DIR, "log.txt")
 DEFAULTS = {
     # "desktop" = the PC with the webcam; "laptop" = the companion device
     "role": "desktop",
+    "language": "auto",          # "auto" (Windows language), "fa" or "en"
 
     # --- presence detection ---
     "camera_index": 0,
@@ -31,6 +32,16 @@ DEFAULTS = {
     "turn_off_monitors": True,
     "lock_after_away_minutes": 0,     # 0 = never lock
     "break_reminder_minutes": 50,     # 0 = off
+    "water_reminder_minutes": 60,     # 0 = off
+
+    # after work_minutes at the desk, the screens are covered for a break.
+    # The break countdown only runs while the camera does NOT see you.
+    "forced_break": {
+        "enabled": True,
+        "work_minutes": 90,
+        "break_minutes": 10,
+        "allow_skip": True,           # emergency skip button (needs a double click)
+    },
 
     # --- gaze -> mouse ---
     "gaze_follow": True,

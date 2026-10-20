@@ -4,6 +4,7 @@ import threading
 import time
 
 from . import winapi
+from .i18n import t
 from .media import MediaController
 from .network import Link
 from .notifications import NotificationWatcher
@@ -23,7 +24,7 @@ class Controller:
         self.state = PRESENT
         self.paused = False
         self.calibrating = False
-        self.status = "در حال شروع..."
+        self.status = "starting"
         self.peer_connected = False
         self.monitors = winapi.list_monitors()
         self._monitors_at = time.monotonic()
@@ -45,6 +46,16 @@ class Controller:
         self._present_since = now
         self._locked = False
         self._break_reminded = False
+        # water reminder + forced break
+        self._next_water = now + self.cfg["water_reminder_minutes"] * 60
+        self._work_since = now
+        self.break_active = False
+        self._break_left = 0.0
+        self._break_ui_at = 0.0
+        self._break_sent_at = 0.0
+        self._break_done_notice = False
+        self._last_tick = now
+        self._status_refresh_at = now
 
     # ------------------------------------------------------------ lifecycle
     @property
@@ -82,9 +93,11 @@ class Controller:
 
     def set_paused(self, paused):
         self.paused = paused
+        if paused and self.break_active:
+            self.end_break(skipped=True)
         if paused and self.state == AWAY:
             self.come_back(local=True)
-        self._set_status("متوقف شده" if paused else "در حال شروع...")
+        self._set_status("paused" if paused else "starting")
 
     def _set_status(self, text):
         self.status = text
@@ -96,7 +109,7 @@ class Controller:
     # ------------------------------------------------------------ main loop
     def _run(self):
         if not self.uses_camera:
-            self._set_status("لپ‌تاپ - منتظر دستور از کامپیوتر اصلی")
+            self._set_status("laptop_wait")
             self._stop.wait()
             return
         errors = 0
@@ -111,10 +124,10 @@ class Controller:
                 try:
                     self.sensor = FaceSensor(self.cfg["camera_index"])
                     self._last_face = time.monotonic()
-                    self._set_status("حاضر" if self.state == PRESENT else "دور از میز")
+                    self._set_status(self.state)
                 except Exception as e:
                     log.error("Camera error: %s", e)
-                    self._set_status("خطا: وبکم باز نشد")
+                    self._set_status("camera_error")
                     self._stop.wait(5)
                     continue
             t0 = time.monotonic()
@@ -148,15 +161,18 @@ class Controller:
         else:
             self._face_streak = 0
         if self.calibrating:
+            self._last_tick = now
             return
 
         if self.state == PRESENT:
             if now - self._last_face >= self.cfg["away_seconds"] \
                     and winapi.idle_seconds() >= self.cfg["idle_guard_seconds"]:
                 self.go_away(local=True)
-                return
-            self._gaze_step(obs, now)
-            self._break_step(now)
+            elif not self.break_active:
+                self._gaze_step(obs, now)
+                self._break_step(now)
+                self._water_step(now)
+                self._work_step(now)
         else:
             back_input = self.cfg["wake_on_input"] and winapi.idle_seconds() < 1.0
             if self._face_streak >= self.cfg["back_frames"] or back_input:
@@ -165,6 +181,13 @@ class Controller:
                     and now - self._away_since >= self.cfg["lock_after_away_minutes"] * 60:
                 self._locked = True
                 winapi.lock_workstation()
+
+        if self.break_active:
+            self._forced_break_tick(now)
+        self._last_tick = now
+        if now - self._status_refresh_at >= 60:  # keeps "next break in X min" fresh
+            self._status_refresh_at = now
+            self._set_status(self.status)
 
     # ------------------------------------------------------------ presence actions
     def go_away(self, local):
@@ -182,7 +205,7 @@ class Controller:
                 winapi.monitors_off()
             if local and self.link:
                 self.link.send({"type": "away"})
-        self._set_status("دور از میز")
+        self._set_status(AWAY)
 
     def come_back(self, local):
         with self._lock:
@@ -193,6 +216,9 @@ class Controller:
             now = time.monotonic()
             self._present_since = self._last_face = now
             self._break_reminded = False
+            # being away for a full break length counts as a break
+            if now - self._away_since >= self.cfg["forced_break"]["break_minutes"] * 60:
+                self._work_since = now
             self.gaze.reset()
             if self.cfg["turn_off_monitors"]:
                 winapi.monitors_on()
@@ -200,13 +226,86 @@ class Controller:
                 self.media.resume()
             if local and self.link:
                 self.link.send({"type": "back"})
-        self._set_status("حاضر")
+        self._set_status("break" if self.break_active else PRESENT)
+        if self._break_done_notice:
+            self._break_done_notice = False
+            self.popup(t("break.done.title"), t("break.done.body"))
+
+    # ------------------------------------------------------------ water + forced break
+    def _water_step(self, now):
+        mins = self.cfg["water_reminder_minutes"]
+        if mins > 0 and now >= self._next_water:
+            self._next_water = now + mins * 60
+            winapi.beep()
+            self.popup(t("water.title"), t("water.body"), seconds=15)
+
+    def _work_step(self, now):
+        fb = self.cfg["forced_break"]
+        if fb["enabled"] and now - self._work_since >= fb["work_minutes"] * 60:
+            self.start_break()
+
+    def next_break_minutes(self):
+        fb = self.cfg["forced_break"]
+        if not fb["enabled"] or not self.uses_camera:
+            return None
+        left = fb["work_minutes"] * 60 - (time.monotonic() - self._work_since)
+        return max(0, int(left // 60))
+
+    def start_break(self):
+        with self._lock:
+            if self.break_active:
+                return
+            fb = self.cfg["forced_break"]
+            log.info("Forced break started")
+            self.break_active = True
+            self._break_left = fb["break_minutes"] * 60.0
+            self._pending_target = None
+            self.ui.break_show(winapi.list_monitors(), fb["allow_skip"],
+                               lambda: self.end_break(skipped=True))
+            self._push_break(time.monotonic(), counting=False, force=True)
+        winapi.beep()
+        self._set_status("break")
+
+    def end_break(self, skipped=False):
+        with self._lock:
+            if not self.break_active:
+                return
+            log.info("Forced break ended (skipped=%s)", skipped)
+            self.break_active = False
+            self._work_since = time.monotonic()
+            self.ui.break_hide()
+            if self.link:
+                self.link.send({"type": "break", "active": False})
+            if not skipped:
+                if self.state == AWAY:
+                    self._break_done_notice = True
+                else:
+                    self.popup(t("break.done.title"), t("break.done.body"))
+        self._set_status(self.state)
+
+    def _forced_break_tick(self, now):
+        # the countdown only runs while the camera does not see you
+        absent = self.state == AWAY or now - self._last_face >= self.cfg["away_seconds"]
+        if absent:
+            self._break_left -= max(0.0, min(2.0, now - self._last_tick))
+        if self._break_left <= 0:
+            self.end_break()
+            return
+        self._push_break(now, counting=absent)
+
+    def _push_break(self, now, counting, force=False):
+        if force or now - self._break_ui_at >= 0.5:
+            self._break_ui_at = now
+            self.ui.break_update(self._break_left, counting)
+        if self.link and (force or now - self._break_sent_at >= 3):
+            self._break_sent_at = now
+            self.link.send({"type": "break", "active": True, "left": self._break_left, "counting": counting})
 
     def _break_step(self, now):
         mins = self.cfg["break_reminder_minutes"]
         if mins > 0 and not self._break_reminded and now - self._present_since >= mins * 60:
             self._break_reminded = True
-            self.popup("وقت استراحت!", f"{mins} دقیقه است که پشت میز نشسته‌اید. کمی بلند شوید و راه بروید.")
+            self.popup(t("remind.title"), t("remind.body", mins=mins))
 
     # ------------------------------------------------------------ gaze -> cursor
     def _gaze_step(self, obs, now):
@@ -263,18 +362,18 @@ class Controller:
     # ------------------------------------------------------------ calibration
     def calibration_targets(self):
         self.monitors = winapi.list_monitors()
-        targets = [(m.name, f"به مانیتور {m.index + 1} نگاه کنید", m) for m in self.monitors]
+        targets = [(m.name, t("cal.look_monitor", n=m.index + 1), m) for m in self.monitors]
         if self.cfg["mwb"]["enabled"]:
             primary = winapi.pick_monitor(self.monitors, -1)
-            targets.append((LAPTOP, "حالا به صفحه لپ‌تاپ نگاه کنید (این صفحه را رها کنید)", primary))
+            targets.append((LAPTOP, t("cal.look_laptop"), primary))
         return targets
 
     def start_calibration(self):
         if not self.uses_camera:
-            self.popup("کالیبراسیون", "در این حالت وبکم فعال نیست.")
+            self.popup(t("cal.title"), t("cal.no_camera"))
             return
         if self.sensor is None or not self.sensor.supports_gaze:
-            self.popup("کالیبراسیون", "وبکم آماده نیست یا مدل تشخیص چهره پیدا نشد.")
+            self.popup(t("cal.title"), t("cal.not_ready"))
             return
         self.calibrating = True
 
@@ -289,19 +388,19 @@ class Controller:
         self.calibrating = False
         self._last_face = time.monotonic()
         if results is None:
-            self.popup("کالیبراسیون لغو شد", "")
+            self.popup(t("cal.cancelled"), "")
             return
         good = {k: v for k, v in results.items() if v}
         failed = [k for k, v in results.items() if not v]
         if len(good) < 2:
-            self.popup("کالیبراسیون ناموفق", "چهره به اندازه کافی دیده نشد. نور و جای وبکم را بررسی کنید.")
+            self.popup(t("cal.failed"), t("cal.failed_body"))
             return
         self.cfg.set("calibration", good)
         self.gaze = GazeClassifier(good, self.cfg["gaze_stable_seconds"])
-        msg = "از این به بعد موس به مانیتوری که نگاه می‌کنید می‌رود."
+        msg = t("cal.done_body")
         if failed:
-            msg += f"\nثبت نشد: {', '.join(failed)}"
-        self.popup("کالیبراسیون انجام شد ✓", msg)
+            msg += "\n" + t("cal.missing", names=", ".join(failed))
+        self.popup(t("cal.done"), msg)
 
     # ------------------------------------------------------------ network
     def _on_link_status(self, connected):
@@ -316,12 +415,22 @@ class Controller:
             self.go_away(local=False)
         elif kind == "back" and self.role == LAPTOP:
             self.come_back(local=False)
+        elif kind == "break" and self.role == LAPTOP:
+            # the desktop drives the break; the laptop just mirrors the cover screen
+            if msg.get("active"):
+                if not self.break_active:
+                    self.break_active = True
+                    self.ui.break_show(winapi.list_monitors(), False, None)
+                self.ui.break_update(float(msg.get("left", 0)), bool(msg.get("counting")))
+            elif self.break_active:
+                self.break_active = False
+                self.ui.break_hide()
 
     def _forward_notification(self, app, title, body):
         if self.link:
             self.link.send({"type": "notification", "app": app, "title": title, "body": body})
 
     # ------------------------------------------------------------ helpers
-    def popup(self, title, body, source=""):
+    def popup(self, title, body, source="", seconds=None):
         mon = winapi.pick_monitor(winapi.list_monitors(), self.cfg["notification_monitor"])
-        self.ui.popup(title, body, mon, self.cfg["notification_seconds"], source)
+        self.ui.popup(title, body, mon, seconds or self.cfg["notification_seconds"], source)

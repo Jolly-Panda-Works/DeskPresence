@@ -1,80 +1,85 @@
+<p align="center">
+  <img src="assets/logo.png" alt="DeskPresence logo" width="120">
+</p>
+
 # DeskPresence
 
-ابزاری برای ویندوز که با وبکم حضور شما پشت میز را تشخیص می‌دهد.
+**Your PC knows when you leave the desk. It uses the webcam to pause your music and turn the monitors off when you get up, and brings both back when you sit down again.**
 
-## کارهایی که انجام می‌دهد
+[![Build](https://github.com/Jolly-Panda-Works/DeskPresence/actions/workflows/build.yml/badge.svg)](https://github.com/Jolly-Panda-Works/DeskPresence/actions/workflows/build.yml)
+[![Latest release](https://img.shields.io/github/v/release/Jolly-Panda-Works/DeskPresence?display_name=tag&color=F97316)](https://github.com/Jolly-Panda-Works/DeskPresence/releases/latest)
+[![Downloads](https://img.shields.io/github/downloads/Jolly-Panda-Works/DeskPresence/total?color=F97316)](https://github.com/Jolly-Panda-Works/DeskPresence/releases)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![Platform](https://img.shields.io/badge/platform-Windows%2010%20%7C%2011-lightgrey)](#download)
 
-| قابلیت | توضیح |
+[Download](https://github.com/Jolly-Panda-Works/DeskPresence/releases/latest/download/DeskPresence.exe) · [فارسی](README.fa.md) · [Report a bug](https://github.com/Jolly-Panda-Works/DeskPresence/issues/new?template=bug_report.md) · [Request a feature](https://github.com/Jolly-Panda-Works/DeskPresence/issues/new?template=feature_request.md)
+
+---
+
+## Features
+
+| | |
 |---|---|
-| بلند شدن از پشت میز | اگر حدود ۱۰ ثانیه چهره‌ای دیده نشود و کیبورد و موس هم استفاده نشده باشند، آهنگی که در حال پخش است متوقف می‌شود و مانیتورها خاموش می‌شوند. کامپیوتر روشن می‌ماند. |
-| برگشتن | مانیتورها روشن می‌شوند و فقط همان آهنگی که برنامه متوقف کرده بود دوباره پخش می‌شود. |
-| موس دنبال نگاه | بعد از یک بار کالیبراسیون، موس به مانیتوری می‌رود که به آن نگاه می‌کنید. روی هر مانیتور، موس به آخرین جایی برمی‌گردد که در آن بود. |
-| لپ‌تاپ | همین برنامه روی لپ‌تاپ در حالت `laptop` اجرا می‌شود. وقتی از پشت میز بلند می‌شوید، مانیتور لپ‌تاپ هم خاموش و آهنگ آن متوقف می‌شود. |
-| نوتیفیکیشن‌ها | نوتیفیکیشن‌های لپ‌تاپ به کامپیوتر فرستاده می‌شوند و روی مانیتوری که انتخاب کرده‌اید نشان داده می‌شوند. |
-| یادآوری استراحت | بعد از ۵۰ دقیقه نشستن پیوسته، یک یادآوری نشان داده می‌شود. |
-| قفل خودکار (اختیاری) | اگر X دقیقه دور باشید، ویندوز قفل می‌شود. |
+| **Leave the desk** | No face for ~10 seconds (and no keyboard/mouse use) → the music that is playing pauses and all monitors turn off. The PC keeps running. |
+| **Come back** | Monitors turn back on and only the music DeskPresence paused starts again. |
+| **Mouse follows your gaze** | After a 10-second calibration, the cursor jumps to the monitor you turn to, back to where it was on that monitor. |
+| **Water reminder** | Every hour: “Time to drink water!” (waits until you are at the desk). |
+| **Forced break** | After 90 minutes of work, every screen is covered for a 10-minute break. The countdown **only runs while the camera does not see you**, so sitting there does not count. Leaving for 10+ minutes on your own counts as a break too. |
+| **Laptop companion** | Run it on your laptop too: its screen and music follow the desktop, it shows the break screen, and its notifications are forwarded to one monitor of the desktop. |
+| **Mouse Without Borders** | Use one mouse and keyboard for both machines (PowerToys). Optionally the cursor even moves to the laptop when you look at it. |
+| **Persian and English** | Switch from the tray menu → Language. |
 
-## گرفتن فایل exe
+Everything runs locally. Webcam frames are processed in memory and are never saved or uploaded. See [PRIVACY.md](PRIVACY.md).
 
-1. این پوشه را در یک ریپازیتوری GitHub قرار دهید:
-   ```bash
-   git init && git add . && git commit -m "DeskPresence" && git branch -M main
-   ```
-   ```bash
-   git remote add origin https://github.com/<user>/DeskPresence.git && git push -u origin main
-   ```
-2. در تب **Actions**، اجرای **Build EXE** را باز کنید. فایل `DeskPresence.exe` در بخش Artifacts آن قرار دارد.
-3. اگر یک tag مثل `v1.0.0` بسازید و push کنید، exe در بخش Releases هم منتشر می‌شود.
+## Download
 
-## راه‌اندازی روی کامپیوتر اصلی
+1. Download **[DeskPresence.exe](https://github.com/Jolly-Panda-Works/DeskPresence/releases/latest/download/DeskPresence.exe)** from the latest release. It is a single portable file, so there is nothing to install.
+2. Run it. An orange icon appears next to the clock. The coloured dot shows the status: green = at the desk, yellow = away, blue = on a break, grey = paused.
+3. Tray menu → **Calibrate gaze…** and look at the dot on each monitor.
+4. Tray menu → **Start with Windows**.
 
-1. `DeskPresence.exe` را اجرا کنید. یک آیکون کنار ساعت ویندوز ظاهر می‌شود. رنگ سبز یعنی حاضر و نارنجی یعنی دور از میز.
-2. از منوی آیکون، گزینه **کالیبره کردن نگاه** را بزنید و به نقطه‌ای که روی هر مانیتور نشان داده می‌شود نگاه کنید. کالیبراسیون فقط حدود ۱۰ ثانیه طول می‌کشد.
-3. گزینه **اجرا همراه ویندوز** را فعال کنید.
+> Windows SmartScreen may warn about an unsigned app the first time: *More info → Run anyway*. The SHA-256 checksum of every release is in `SHA256SUMS.txt`.
 
-## کنترل لپ‌تاپ با همان موس و کیبورد
+## Laptop setup
 
-برای اشتراک موس و کیبورد از **Mouse Without Borders** استفاده کنید. این ابزار رایگان و ساخت مایکروسافت است و داخل PowerToys قرار دارد. روی هر دو دستگاه نصب و جفتش کنید. نوشتن یک KVM نرم‌افزاری از صفر کار بزرگی است و نسخه مایکروسافت پایدار و امن است.
-
-بعد از نصب، DeskPresence را روی لپ‌تاپ هم اجرا کنید و این مراحل را انجام دهید:
-
-1. **روی کامپیوتر:** فایل تنظیمات را باز کنید (منوی آیکون → ویرایش تنظیمات). مقدار `"network_enabled": true` را قرار دهید و مقدار `token` را کپی کنید.
-2. **روی لپ‌تاپ:** در فایل تنظیمات این مقادیر را قرار دهید:
+1. Install **[PowerToys](https://learn.microsoft.com/windows/powertoys/)** on both machines and pair them in **Mouse Without Borders**.
+2. On the desktop: tray menu → *Edit settings*, set `"network_enabled": true` and copy the `token`.
+3. On the laptop, in its settings file:
    ```json
    "role": "laptop",
    "network_enabled": true,
-   "desktop_host": "IP کامپیوتر (مثلا 192.168.1.10)",
-   "token": "همان توکن کامپیوتر"
+   "desktop_host": "192.168.1.10",
+   "token": "<the desktop's token>"
    ```
-3. برنامه را روی هر دو دستگاه ببندید و دوباره باز کنید. اگر ویندوز درباره فایروال پرسید، روی کامپیوتر اجازه دسترسی **Private** را بدهید.
+4. Restart DeskPresence on both. Allow it on **Private** networks if the Windows firewall asks.
+5. On the laptop, turn on **Do not disturb**. Its notifications are still forwarded and are shown on the desktop monitor set in `notification_monitor`.
 
-**موس دنبال نگاه، تا لپ‌تاپ (آزمایشی):** در Mouse Without Borders میانبر *Switch between machines* را روی Ctrl+Alt+F1..F4 بگذارید. سپس در تنظیمات کامپیوتر مقدار `"mwb": {"enabled": true, "desktop_hotkey": 1, "laptop_hotkey": 2}` را قرار دهید و دوباره کالیبره کنید. یک مرحله «به لپ‌تاپ نگاه کنید» به کالیبراسیون اضافه می‌شود.
+Windows always shows the desktop's own notifications on the *main display*. To choose which monitor that is: Settings → System → Display → *Make this my main display*.
 
-## نوتیفیکیشن‌ها فقط روی یک مانیتور
+**Gaze → laptop (experimental):** in Mouse Without Borders, set the *switch between machines* shortcut to Ctrl+Alt+F1…F4. Then set `"mwb": {"enabled": true, "desktop_hotkey": 1, "laptop_hotkey": 2}` and calibrate again.
 
-- **نوتیف‌های خود ویندوزِ کامپیوتر** همیشه روی مانیتور اصلی (Primary) نشان داده می‌شوند. این رفتار را خود ویندوز تعیین می‌کند. برای تغییرش به Settings → System → Display بروید، مانیتور دلخواه را انتخاب کنید و *Make this my main display* را بزنید.
-- **نوتیف‌های لپ‌تاپ** با کادر خود برنامه روی مانیتوری نشان داده می‌شوند که در `notification_monitor` تعیین شده است. مقدار `-1` یعنی مانیتور اصلی. `0`، `1` و ... شماره مانیتورها از چپ به راست است.
-- برای اینکه نوتیف‌ها روی صفحه لپ‌تاپ نشان داده نشوند، روی لپ‌تاپ **Do not disturb** را روشن کنید. برنامه همچنان نوتیف‌ها را می‌خواند و می‌فرستد. اگر بخواهید بعد از فرستادن از لپ‌تاپ پاک شوند، مقدار `"dismiss_forwarded": true` را قرار دهید.
-- بار اول، ویندوزِ لپ‌تاپ اجازه دسترسی به نوتیفیکیشن‌ها را می‌پرسد. اگر نپرسید، این مسیر را بررسی کنید: Settings → Privacy & security → Notifications.
+## Settings
 
-## تنظیمات مهم (`%APPDATA%\DeskPresence\config.json`)
+The settings file is `%APPDATA%\DeskPresence\config.json` (tray menu → *Edit settings*, then *Apply saved settings*).
 
-| کلید | پیش‌فرض | معنی |
+| Key | Default | Meaning |
 |---|---|---|
-| `away_seconds` | 10 | چند ثانیه بدون چهره تا «دور از میز» حساب شود |
-| `idle_guard_seconds` | 20 | تا وقتی در این مدت با کیبورد یا موس کار کرده‌اید، هیچ چیز خاموش نمی‌شود |
-| `wake_on_input` | true | زدن کلید یا تکان دادن موس هم یعنی برگشته‌اید |
-| `camera_index` | 0 | اگر چند وبکم دارید، شماره وبکم را اینجا تغییر دهید |
-| `gaze_stable_seconds` | 0.6 | چند ثانیه نگاه ثابت به یک مانیتور تا موس جابه‌جا شود |
-| `lock_after_away_minutes` | 0 | قفل خودکار بعد از این چند دقیقه (`0` یعنی خاموش) |
-| `break_reminder_minutes` | 50 | یادآوری استراحت (`0` یعنی خاموش) |
+| `language` | `auto` | `auto`, `fa` or `en` |
+| `away_seconds` | 10 | Seconds without a face before you count as away |
+| `idle_guard_seconds` | 20 | Never turn anything off if the keyboard/mouse was used this recently |
+| `wake_on_input` | true | Touching the keyboard/mouse also means you are back |
+| `camera_index` | 0 | Which webcam to use |
+| `water_reminder_minutes` | 60 | `0` = off |
+| `forced_break` | 90 / 10 | `work_minutes`, `break_minutes`, `enabled`, `allow_skip` |
+| `break_reminder_minutes` | 50 | A gentle “stand up” popup (`0` = off) |
+| `lock_after_away_minutes` | 0 | Lock Windows after being away this long (`0` = never) |
+| `gaze_stable_seconds` | 0.6 | How long you must look at a monitor before the cursor moves |
+| `notification_monitor` | -1 | `-1` = main display, else 0, 1, … from left to right |
 
-بعد از ویرایش فایل، از منوی آیکون **اعمال تنظیمات ذخیره‌شده** را بزنید.
-
-## اجرا از سورس (برای توسعه)
+## Run from source
 
 ```bash
-pip install -r requirements.txt
+pip install -r requirements-dev.txt
 ```
 ```bash
 python scripts/download_model.py
@@ -83,8 +88,43 @@ python scripts/download_model.py
 python run.py
 ```
 
-## نکته‌ها
+Run the tests with `python -m pytest`. Regenerate the icons with `python tools/make_icons.py`.
 
-- اگر مانیتور بلافاصله بعد از خاموش شدن روشن شد، معمولا موس روی میز کمی تکان می‌خورد یا نوری روی سنسور آن می‌افتد.
-- برای تشخیص بهتر نگاه، وبکم را وسط دو مانیتور بگذارید و صورتتان را به سمت مانیتور بچرخانید، نه فقط چشم‌هایتان را.
-- تصاویر وبکم هیچ‌جا ذخیره یا ارسال نمی‌شوند. وقتی برنامه در حالت «توقف موقت» است، وبکم کاملا آزاد می‌شود.
+## How the GitHub Action builds it
+
+Every push builds `DeskPresence.exe` on `windows-latest` after the tests pass, and keeps it for 14 days under *Actions → the run → Artifacts*.
+
+| Build from | Version | Published |
+|---|---|---|
+| `main` | `MAJOR.MINOR.<run number>`, e.g. `1.1.42` | Git tag + public GitHub Release with the exe |
+| a tag `vX.Y.Z` | `X.Y.Z` | GitHub Release |
+| any other branch / PR | `MAJOR.MINOR.0-dev.<run>` | Artifact only |
+
+`MAJOR.MINOR` comes from the [`VERSION`](VERSION) file. The version shows up in the About window, the exe's file properties and the release name.
+
+## Project structure
+
+```
+deskpresence/
+  controller.py     presence state machine, breaks, water, gaze -> cursor, laptop sync
+  vision.py         webcam + YuNet face detector + head-pose estimate
+  media.py          pause / resume through Windows media sessions
+  winapi.py         monitors, cursor, power, keyboard (ctypes)
+  network.py        desktop <-> laptop link (JSON lines over TCP, shared token)
+  notifications.py  reads Windows notifications on the laptop
+  ui.py             popups, break screen, calibration, About (Tk)
+  tray.py           tray icon and menu
+  i18n.py           Persian / English strings
+tools/              set_version.py, make_icons.py
+tests/              pytest suite (runs in CI before every build)
+```
+
+## Contributing
+
+Pull requests are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md). Please report security issues privately as described in [SECURITY.md](SECURITY.md).
+
+## License
+
+[MIT](LICENSE) © 2026 [Usef Farahmand](https://github.com/Usef-Farahmand) · [useffarahmand.com](https://www.useffarahmand.com/)
+
+Face detection uses the [YuNet](https://github.com/opencv/opencv_zoo/tree/main/models/face_detection_yunet) model from OpenCV Zoo (MIT).
