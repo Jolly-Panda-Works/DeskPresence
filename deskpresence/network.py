@@ -10,6 +10,7 @@ without typing an IP address (see discover()).
 import hmac
 import json
 import logging
+import select
 import socket
 import threading
 import time
@@ -52,28 +53,65 @@ def local_addresses():
         s.close()
     except OSError:
         pass
-    return sorted(a for a in addrs if not a.startswith("127."))
+    return sorted((a for a in addrs if not a.startswith("127.")), key=lambda a: (_rank(a), a))
 
 
-def discover(port, timeout=2.0):
-    """Broadcasts on the LAN and returns [(ip, hostname)] of desktops running DeskPresence."""
+def discover(port, timeout=2.5):
+    """Broadcasts on every network adapter and returns [(ip, hostname)] of desktops running DeskPresence.
+
+    One socket per local address: with a VPN installed, a plain broadcast would only leave
+    through the VPN adapter and never reach the other PC on the home network.
+    """
     found = {}
-    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    socks = []
+    for local in local_addresses() + ["0.0.0.0"]:
+        try:
+            s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            s.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
+            s.bind((local, 0))
+            s.setblocking(False)
+            targets = ["255.255.255.255"]
+            if local != "0.0.0.0":
+                prefix = local.rsplit(".", 1)[0]
+                targets.append(prefix + ".255")  # the usual /24 home network
+                # many Wi-Fi routers drop broadcasts: also ask every address of the /24 directly
+                targets += [f"{prefix}.{i}" for i in range(1, 255)]
+            for target in targets:
+                try:
+                    s.sendto(DISCOVER_MSG, (target, port))
+                except OSError:
+                    pass
+            socks.append(s)
+        except OSError:
+            continue
     try:
-        s.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
-        s.settimeout(0.3)
-        s.sendto(DISCOVER_MSG, ("255.255.255.255", port))
         end = time.monotonic() + timeout
-        while time.monotonic() < end:
-            try:
-                data, addr = s.recvfrom(1024)
-            except socket.timeout:
-                continue
-            if data.startswith(DISCOVER_REPLY):
-                found[addr[0]] = data[len(DISCOVER_REPLY):].decode("utf-8", "replace").strip()
+        while time.monotonic() < end and socks:
+            ready, _, _ = select.select(socks, [], [], 0.2)
+            for s in ready:
+                try:
+                    data, addr = s.recvfrom(1024)
+                except OSError:
+                    continue
+                if data.startswith(DISCOVER_REPLY):
+                    found[addr[0]] = data[len(DISCOVER_REPLY):].decode("utf-8", "replace").strip()
     finally:
-        s.close()
-    return sorted(found.items())
+        for s in socks:
+            s.close()
+    # one address per PC, preferring the home network over VPN / Hyper-V / WSL adapters
+    best = {}
+    for ip, name in found.items():
+        if name not in best or _rank(ip) < _rank(best[name]):
+            best[name] = ip
+    return sorted((ip, name) for name, ip in best.items())
+
+
+def _rank(ip):
+    if ip.startswith("192.168."):
+        return 0
+    if ip.startswith("10."):
+        return 1
+    return 2  # 172.16-31: usually VPN, Hyper-V or WSL
 
 
 def test_connection(host, port, token, timeout=4.0):
@@ -105,6 +143,8 @@ class Link:
         self._stop = threading.Event()
         self._server = None
         self._udp = None
+        self.listening = False
+        self.error = None
 
     @property
     def connected(self):
@@ -206,9 +246,11 @@ class Link:
             self._server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
             self._server.bind(("0.0.0.0", self.port))
             self._server.listen(4)
-        except OSError:
+        except OSError as e:
             log.exception("Cannot listen on port %s", self.port)
+            self.error = str(e)
             return
+        self.listening = True
         log.info("Listening on port %s", self.port)
         threading.Thread(target=self._keepalive, daemon=True).start()
         while not self._stop.is_set():

@@ -127,7 +127,7 @@ def classify(aumid, playback_type=0, album="", overrides=None):
 class MediaController:
     def __init__(self, cfg=None):
         self.cfg = cfg
-        self._resume_ids = []
+        self._resume = {}  # reason ("away", "call") -> app ids to play again
         self._fallback_paused = False
         self.seen = {}  # app key -> (display name, last detected kind)
         self._lock = threading.Lock()
@@ -167,7 +167,7 @@ class MediaController:
                 log.exception("Pausing a session failed")
         return resume
 
-    async def _resume(self, ids):
+    async def _resume_ids(self, ids):
         for s, aumid, _kind in await self._sessions():
             try:
                 if aumid in ids and s.get_playback_info().playback_status != PlaybackStatus.PLAYING:
@@ -186,23 +186,33 @@ class MediaController:
         with self._lock:
             return dict(self.seen)
 
-    def pause(self):
+    def pause(self, reason="away"):
+        """Pauses what is playing. Music paused for `reason` is resumed by resume(reason)."""
         if HAVE_SMTC:
             try:
-                self._resume_ids = asyncio.run(self._pause())
+                ids = asyncio.run(self._pause())
+                self._resume[reason] = self._resume.get(reason, []) + ids
                 return
             except Exception:
                 log.exception("SMTC pause failed")
-        winapi.press_media_play_pause()
-        self._fallback_paused = True
+        if reason == "away":
+            winapi.press_media_play_pause()
+            self._fallback_paused = True
 
-    def resume(self):
-        if HAVE_SMTC and self._resume_ids:
+    def resume(self, reason="away"):
+        ids = self._resume.pop(reason, [])
+        if HAVE_SMTC and ids:
             try:
-                asyncio.run(self._resume(self._resume_ids))
+                asyncio.run(self._resume_ids(ids))
             except Exception:
                 log.exception("SMTC resume failed")
-            self._resume_ids = []
-        elif self._fallback_paused:
+        elif reason == "away" and self._fallback_paused:
             winapi.press_media_play_pause()
-        self._fallback_paused = False
+        if reason == "away":
+            self._fallback_paused = False
+
+    def move(self, src, dst):
+        """Hand paused music over to another reason (a call ended while you are away)."""
+        ids = self._resume.pop(src, [])
+        if ids:
+            self._resume[dst] = self._resume.get(dst, []) + ids

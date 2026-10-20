@@ -45,6 +45,7 @@ class SettingsWindow:
         self.fields = {}   # config path -> (tk variable, converter)
         self.media_vars = {}
         self.section = "general"
+        self._save_job = None
         self.preview_img = None
         self.win = None
         self._build()
@@ -110,8 +111,9 @@ class SettingsWindow:
         foot.grid(row=2, column=0, columnspan=2, sticky="ew")
         foot.grid_propagate(False)
         far = "left" if self.rtl else "right"
-        self._primary(foot, t("set.save"), self.save).pack(side=far, padx=(8, 20), pady=12)
-        self._ghost(foot, t("about.close"), self.close).pack(side=far, pady=12)
+        self._primary(foot, t("about.close"), self.close).pack(side=far, padx=(8, 20), pady=12)
+        ctk.CTkLabel(foot, text=t("set.autosave"), font=self.f_small, text_color=FAINT_TEXT).pack(
+            side="right" if self.rtl else "left", padx=20)
         self.saved_lbl = ctk.CTkLabel(foot, text="", font=self.f_body, text_color=OK_GREEN)
         self.saved_lbl.pack(side=far, padx=16)
 
@@ -207,7 +209,19 @@ class SettingsWindow:
         else:
             var = tk.DoubleVar(value=float(value))
         self.fields[path] = (var, kind)
+        var.trace_add("write", lambda *_: self._schedule_save())
         return var
+
+    def _schedule_save(self, delay=800):
+        """Every change is saved (and applied) shortly after you make it."""
+        if self._save_job is not None:
+            self.win.after_cancel(self._save_job)
+        self._save_job = self.win.after(delay, self._autosave)
+
+    def _autosave(self):
+        self._save_job = None
+        if self.alive:
+            self.save()
 
     def _switch(self, card, label, path, hint=None):
         var = self._var(path, bool)
@@ -300,6 +314,7 @@ class SettingsWindow:
             p, text="", variable=self.autostart_var, progress_color=ORANGE, button_color=FG,
             button_hover_color=FG, fg_color=FIELD, width=46,
             command=lambda: set_autostart(self.autostart_var.get())))
+        self._switch(c, t("menu.widget"), "widget.enabled", hint=t("set.widget_hint"))
         self._choice(c, t("set.role"), "role",
                      [("desktop", t("set.role_desktop")), ("laptop", t("set.role_laptop"))],
                      hint=t("set.role_hint"))
@@ -319,6 +334,8 @@ class SettingsWindow:
             p, text=t("set.preview_off"), width=320, height=180, fg_color=FIELD, corner_radius=12,
             text_color=MUTED, font=self.f_small), hint=t("set.preview_hint"))
         self._info(c, t("set.camera_state"), "camera_state")
+        self.cam_btn = self._row(c, "", lambda p: self._ghost(p, t("menu.cam_give"), self._toggle_camera, width=190),
+                                 hint=t("set.release_hint"))
         self._choice(c, t("set.share"), "camera_share",
                      [("ask", t("set.share_ask")), ("always", t("set.share_always")), ("never", t("set.share_never"))],
                      hint=t("set.share_hint"))
@@ -355,6 +372,7 @@ class SettingsWindow:
     def _sec_actions(self):
         c = self._card(t("set.sec.actions"))
         self._switch(c, t("set.pause_media"), "pause_media", hint=t("set.pause_media_hint"))
+        self._switch(c, t("set.pause_on_call"), "pause_on_call", hint=t("set.pause_on_call_hint"))
         self._switch(c, t("set.monitors_off"), "turn_off_monitors")
         self._slider(c, t("set.lock_after"), "lock_after_away_minutes", 0, 60, 1, unit=t("set.min"))
         self._end(c)
@@ -368,6 +386,7 @@ class SettingsWindow:
         overrides = self.cfg["media_apps"]
         for key, (name, kind) in sorted(seen.items(), key=lambda kv: kv[1][0].lower()):
             var = tk.StringVar(value=overrides.get(key, "auto"))
+            var.trace_add("write", lambda *_: self._schedule_save())
             self.media_vars[key] = var
             texts = {m: t("media." + m) for m in MODES}
             back = {v: k for k, v in texts.items()}
@@ -383,6 +402,14 @@ class SettingsWindow:
         self._end(c)
 
     def _sec_health(self):
+        c = self._card(t("set.timers"), t("set.timers_hint"))
+        self._info(c, "💧 " + t("set.water_left"), "t_water")
+        self._row(c, "", lambda p: self._primary(p, t("water.drank"), self._drank, width=140))
+        self._info(c, "☕ " + t("set.break_left"), "t_break")
+        self._info(c, "🪑 " + t("set.sitting"), "t_sit")
+        self._slider(c, t("set.reset_after"), "timer_reset_away_minutes", 1, 60, 1, unit=t("set.min"),
+                     hint=t("set.reset_after_hint"))
+        self._end(c)
         c = self._card(t("set.sec.health"))
         self._slider(c, t("set.water"), "water_reminder_minutes", 0, 180, 5, unit=t("set.min"))
         self._slider(c, t("set.standup"), "break_reminder_minutes", 0, 120, 5, unit=t("set.min"))
@@ -431,6 +458,9 @@ class SettingsWindow:
                       hint=t("set.my_ip_hint"))
             self._entry(c, t("set.token"), "token", width=230, readonly=True, hint=t("set.token_hint"))
             self._row(c, "", self._token_buttons)
+            self._info(c, t("set.firewall"), "firewall", hint=t("set.firewall_hint"))
+            self._row(c, "", lambda p: self._ghost(p, t("set.firewall_allow"), self._allow_firewall, width=220))
+            self._check_firewall()
         else:
             self._entry(c, t("set.desktop_ip"), "desktop_host", width=200)
             self._row(c, "", lambda p: self._ghost(p, t("set.find"), self._find_desktop, width=200),
@@ -483,6 +513,27 @@ class SettingsWindow:
                      wraplength=520).pack(pady=(4, 24))
 
     # ------------------------------------------------------------ actions
+    def _drank(self):
+        self.ctrl.drank_water()
+        self._flash(t("set.water_reset"))
+
+    def _toggle_camera(self):
+        if self.ctrl.camera_lent_to:
+            self.ctrl.take_camera_back()
+        else:
+            self.ctrl.release_camera()
+
+    def _check_firewall(self):
+        from . import firewall
+        self._set_live("firewall", t("set.testing"), MUTED)
+        self._background(firewall.rule_exists, lambda ok: self._set_live(
+            "firewall", t("set.firewall_ok") if ok else t("set.firewall_missing"), OK_GREEN if ok else ORANGE))
+
+    def _allow_firewall(self):
+        from . import firewall
+        if firewall.allow():
+            self.win.after(4000, self._check_firewall)
+
     def _token_buttons(self, p):
         box = ctk.CTkFrame(p, fg_color="transparent")
         self._ghost(box, t("set.copy"), self._copy_token, width=100).pack(side="left", padx=4)
@@ -597,6 +648,8 @@ class SettingsWindow:
             self.fields, self.media_vars = {}, {}
             self.section = section
             self._build()
+        elif old.get("network_enabled") != data["network_enabled"] and self.section == "laptop":
+            self.show("laptop")  # the role-dependent rows change
         self._flash(t("set.saved"))
 
     # ------------------------------------------------------------ live values
@@ -612,8 +665,12 @@ class SettingsWindow:
     def _update_live(self):
         ctrl = self.ctrl
         if "camera_state" in self.live:
+            if getattr(self, "cam_btn", None) is not None and self.cam_btn.winfo_exists():
+                self.cam_btn.configure(text=t("menu.cam_take") if ctrl.camera_lent_to else t("menu.cam_give"))
             if ctrl.camera_lent_to:
                 self._set_live("camera_state", t("status.camera_lent_to", app=ctrl.camera_lent_to[1]), ORANGE)
+            elif ctrl.status == "camera_busy":
+                self._set_live("camera_state", t("status.camera_busy"), ORANGE)
             elif ctrl.sensor is not None:
                 self._set_live("camera_state", t("set.cam_on"), OK_GREEN)
             else:
@@ -637,9 +694,23 @@ class SettingsWindow:
             else:
                 self._set_live("phone_live", t("set.phone_near") if near else t("set.phone_gone"),
                                OK_GREEN if near else DANGER)
+        if "t_water" in self.live:
+            tm = ctrl.timers()
+
+            def mins(v):
+                return t("set.off") if v is None else t("widget.min", n=int(v // 60))
+            self._set_live("t_water", mins(tm["water_left"]))
+            if tm["break_active"]:
+                s = int(tm["break_remaining"] or 0)
+                self._set_live("t_break", f"{s // 60:02d}:{s % 60:02d}", ORANGE)
+            else:
+                self._set_live("t_break", mins(tm["break_left"]))
+            self._set_live("t_sit", mins(tm["sitting"]))
         if "link_state" in self.live:
             if not self.cfg["network_enabled"]:
                 self._set_live("link_state", t("set.link_disabled"), MUTED)
+            elif ctrl.link and ctrl.link.error:
+                self._set_live("link_state", t("set.link_error", err=ctrl.link.error[:60]), DANGER)
             elif ctrl.link and ctrl.link.connected:
                 names = ", ".join(ctrl.link.peer_names)
                 self._set_live("link_state", t("set.link_connected", names=names), OK_GREEN)

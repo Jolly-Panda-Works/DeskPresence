@@ -162,7 +162,7 @@ class UI:
 
     # ------------------------------------------------------------ question box
     def ask(self, title, body, yes_text, no_text, callback, monitor, timeout=45):
-        """Small topmost question on `monitor`; callback(True/False). No answer = False."""
+        """Small topmost question on `monitor`; callback(True / False, or None when not answered in time)."""
         self.call(self._ask, title, body, yes_text, no_text, callback, monitor, timeout)
 
     def _ask(self, title, body, yes_text, no_text, callback, monitor, timeout):
@@ -203,7 +203,7 @@ class UI:
         h = win.winfo_reqheight()
         l, t_, r, b = monitor.work
         win.geometry(f"{w}x{h}+{r - w - 12}+{b - h - 12}")
-        win.after(int(timeout * 1000), lambda: answer(False))
+        win.after(int(timeout * 1000), lambda: answer(None))
 
     # ------------------------------------------------------------ forced break cover
     def break_show(self, monitors, allow_skip, on_skip):

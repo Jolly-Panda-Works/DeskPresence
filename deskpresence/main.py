@@ -24,7 +24,10 @@ def self_test():
     try:
         import cv2  # noqa: F401
         import customtkinter  # noqa: F401
-        from . import camshare, controller, eyetrack, media, notifications, phone, settings_ui, tray  # noqa: F401
+        from . import (calls, camshare, controller, eyetrack, firewall, media, notifications,  # noqa: F401
+                       phone, settings_ui, tray, widget)
+        calls.phone_link_audio_active()
+        import pycaw.pycaw  # noqa: F401
         from .vision import _model_path
         assert _model_path(), "YuNet model missing"
         assert eyetrack.available(), "eye-tracking model or mediapipe missing"
@@ -57,14 +60,18 @@ def main():
     from .controller import Controller
     from .tray import Tray
     from .ui import UI
+    from .widget import Widget
 
     ui = UI()
     ctrl = Controller(cfg, ui)
     tray = Tray(ctrl, cfg, ui)
+    tray.widget = Widget(ui, ctrl, cfg, tray.open_settings)
     ctrl.on_state = tray.refresh
     ctrl.start()
     tray.start()
 
+    if cfg["widget"]["enabled"] and ctrl.uses_camera:
+        ui.call(tray.widget.show)
     if cfg["role"] == "desktop" and len(cfg["calibration"]) < 2 and len(winapi.list_monitors()) > 1:
         ctrl.popup(t("welcome.title"), t("welcome.body"))
 

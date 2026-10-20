@@ -24,9 +24,12 @@
 | **Come back** | Monitors turn back on and the **music** DeskPresence paused plays again. Videos stay paused. |
 | **Mouse follows your gaze** | *Jump to monitor*: turn your head and the cursor jumps to that monitor. *Follow my eyes*: the cursor moves to where you look (iris tracking, toggle with Ctrl+Alt+E). |
 | **Phone instead of webcam** | Use your paired phone over Bluetooth, with or without the webcam. No app needed on the phone. |
-| **Shares the webcam** | When another app (a video call, the Camera app, ...) wants the webcam, DeskPresence asks and hands it over, then takes it back when that app is done. |
+| **Shares the webcam** | When a video app starts (Zoom, Teams, Camera, OBS, or any app that used the webcam before), DeskPresence asks and hands the webcam over, then takes it back when that app is done. *Release webcam* in the widget frees it by hand. |
 | **Settings window** | Every option, a live webcam preview, phone range test, laptop pairing with automatic discovery and a connection test. |
-| **Water reminder** | Every hour: “Time to drink water!” (waits until you are at the desk). |
+| **Water reminder** | After every hour at the desk: “Time to drink water!” with *I drank ✓* / *In 10 minutes*. The **I drank** button in the widget, the tray menu and Settings restarts the timer. |
+| **Timer widget** | A small always-on-top window: status, time to the next water reminder and break, time at the desk, eye-control and webcam buttons. Drag it anywhere. |
+| **Fair timers** | Timers only count time at the desk: they pause while you are away and continue when you are back. Away 10+ minutes counts as a break and restarts the break / stand-up timers. |
+| **Phone calls** | With Windows Phone Link, an incoming call pauses music and video; music resumes after the call. |
 | **Forced break** | After 90 minutes of work, every screen is covered for a 10-minute break. The countdown **only runs while the camera does not see you**, so sitting there does not count. Leaving for 10+ minutes on your own counts as a break too. |
 | **Laptop companion** | Run it on your laptop too: its screen and music follow the desktop, it shows the break screen, and its notifications are forwarded to one monitor of the desktop. |
 | **Mouse Without Borders** | Use one mouse and keyboard for both machines (PowerToys). Optionally the cursor even moves to the laptop when you look at it. |
@@ -65,14 +68,16 @@ The phone is checked every few seconds. A phone in range answers within a fracti
 
 ## Sharing the webcam
 
-Most webcams can only be used by one app at a time. When another app starts using it, DeskPresence asks *“Zoom wants to use the webcam — hand it over?”* (or always / never, in Settings → Presence). While that app has it, presence comes from your phone, or from keyboard/mouse inactivity (5 minutes by default). When that app is done, DeskPresence takes the webcam back by itself.
+Most webcams can only be used by one app at a time, and Windows does not tell the app holding it when another app tries and fails. So DeskPresence watches for video apps starting: the well-known ones (Zoom, Teams, Camera, OBS, Skype, Webex, ...) and every app Windows lists as having used the webcam before. When one starts, DeskPresence asks *“Zoom wants to use the webcam — hand it over?”* (or always / never, in Settings → Presence). For a call in the browser (Google Meet, ...) press **Release webcam** in the widget, and **Take webcam back** afterwards. While that app has it, presence comes from your phone, or from keyboard/mouse inactivity (5 minutes by default). When that app is done, DeskPresence takes the webcam back by itself.
 
 ## Laptop setup
 
 1. Install DeskPresence on both machines (and **[PowerToys](https://learn.microsoft.com/windows/powertoys/)** with **Mouse Without Borders** for one mouse and keyboard).
-2. On the main PC: Settings → *Laptop link* → turn on *Link enabled* → **Copy** the token → *Save*.
-3. On the laptop: Settings → *General* → *This device is* → **Companion laptop** → *Save*. Then *Laptop link* → *Link enabled*, **Find automatically**, paste the token, **Test**, *Save*.
-4. Allow DeskPresence on **Private** networks if the Windows firewall asks.
+2. On the main PC: Settings → *Laptop link* → turn on **Link enabled** → **Allow in firewall…** (one admin prompt) → **Copy** the token.
+3. On the laptop: Settings → *General* → *This device is* → **Companion laptop**. Then *Laptop link* → **Link enabled**, **Find automatically**, paste the token, **Test**.
+4. Settings save by themselves; the status line shows *Connected to …* on both machines.
+
+Not connecting? *Find automatically* asks every address of your home network directly, so it also works when the router drops broadcasts or a VPN is installed. The usual cause is the firewall on the main PC: if its first “allow access” prompt was closed, Windows silently blocks DeskPresence; **Allow in firewall…** removes that block.
 5. On the laptop, turn on **Do not disturb**. Its notifications are still forwarded and appear on the monitor chosen in *Laptop link → Notifications*.
 
 Windows always shows the main PC's own notifications on the *main display*. To choose which monitor that is: Windows Settings → System → Display → *Make this my main display*.
@@ -88,7 +93,10 @@ Everything is in the Settings window. The same values live in `%APPDATA%\DeskPre
 | `phone` | | `device_id`, `check_seconds` (8), `away_checks` (2) |
 | `camera_share` | `ask` | `ask`, `always` or `never` |
 | `idle_fallback_minutes` | 5 | Away after this much inactivity when neither webcam nor phone is available |
-| `mouse_mode` | `monitor` | `off`, `monitor` or `eyes` |
+| `mouse_mode` | `monitor` | `off`, `monitor` or `eyes` (Ctrl+Alt+E or the 👁 button turns eye control on/off) |
+| `timer_reset_away_minutes` | 10 | Being away this long restarts the break and stand-up timers |
+| `pause_on_call` | true | Pause media during Phone Link calls |
+| `widget` | on | The floating timer widget (`enabled`, position) |
 | `eye_deadzone_px` | 90 | Eye mode ignores gaze changes smaller than this |
 | `away_seconds` | 10 | Seconds without a face before you count as away |
 | `idle_guard_seconds` | 20 | Never turn anything off if the keyboard/mouse was used this recently |
@@ -136,6 +144,9 @@ deskpresence/
   eyetrack.py       MediaPipe iris tracking -> cursor (calibrated regression)
   phone.py          Bluetooth phone presence
   camshare.py       notices other apps that want the webcam
+  calls.py          phone calls through Windows Phone Link
+  firewall.py       the Windows Firewall rule for the laptop link
+  widget.py         the floating timer widget
   settings_ui.py    the Settings window (customtkinter)
   media.py          pause / resume through Windows media sessions
   winapi.py         monitors, cursor, power, keyboard (ctypes)

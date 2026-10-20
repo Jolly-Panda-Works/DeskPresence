@@ -11,17 +11,38 @@ def test_water_reminder_every_hour(sim):
     assert t("water.title") not in popups(sim)
     sim.run(2 * 60, True)
     assert popups(sim).count(t("water.title")) == 1
+    sim.ui.pending(None)  # not answered
     sim.run(60 * 60, True)
     assert popups(sim).count(t("water.title")) == 2
 
 
-def test_water_reminder_waits_until_you_are_back(sim):
-    sim.run(30, True)
-    sim.run(40 * 60, False)
-    sim.run(30 * 60, False)
+def test_water_timer_pauses_while_away(sim):
+    sim.ctrl.cfg["forced_break"]["enabled"] = False
+    sim.run(30 * 60, True)
+    sim.run(40 * 60, False)  # away: does not count
+    sim.run(29 * 60, True)
     assert t("water.title") not in popups(sim)
-    sim.run(5, True)
+    sim.run(2 * 60, True)
     assert t("water.title") in popups(sim)
+
+
+def test_drank_water_restarts_the_timer(sim):
+    sim.ctrl.cfg["forced_break"]["enabled"] = False
+    sim.run(50 * 60, True)
+    sim.ctrl.drank_water()
+    sim.run(50 * 60, True)
+    assert t("water.title") not in popups(sim)
+    assert 9 * 60 < sim.ctrl.timers()["water_left"] <= 10 * 60
+
+
+def test_water_later_asks_again_in_10_minutes(sim):
+    sim.ctrl.cfg["forced_break"]["enabled"] = False
+    sim.run(61 * 60, True)
+    sim.ui.pending(False)  # "in 10 minutes"
+    sim.run(9 * 60, True)
+    assert popups(sim).count(t("water.title")) == 1
+    sim.run(2 * 60, True)
+    assert popups(sim).count(t("water.title")) == 2
 
 
 def test_break_starts_after_90_minutes(sim):
@@ -68,11 +89,25 @@ def test_natural_long_absence_counts_as_break(sim):
     assert sim.ctrl.next_break_minutes() >= 89
 
 
-def test_short_absence_does_not_reset_work_timer(sim):
+def test_short_absence_pauses_the_work_timer(sim):
     sim.run(60 * 60, True)
-    sim.run(2 * 60, False)
+    sim.run(5 * 60, False)  # 5 min away: paused, not reset
     sim.run(5, True)
-    assert sim.ctrl.next_break_minutes() < 30
+    assert sim.ctrl.next_break_minutes() == 29
+
+
+def test_standup_reminder_pauses_and_resets(sim):
+    sim.ctrl.cfg["forced_break"]["enabled"] = False
+    sim.ctrl.cfg["break_reminder_minutes"] = 50
+    sim.run(40 * 60, True)
+    sim.run(5 * 60, False)   # short absence: paused
+    sim.run(9 * 60, True)
+    assert t("remind.title") not in popups(sim)
+    sim.run(2 * 60, True)
+    assert t("remind.title") in popups(sim)
+    sim.run(11 * 60, False)  # long absence: reset
+    sim.run(5, True)
+    assert sim.ctrl.sit_elapsed < 10
 
 
 def test_skip_ends_break(sim):

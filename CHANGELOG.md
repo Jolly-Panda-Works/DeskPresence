@@ -3,6 +3,16 @@
 Release builds are published automatically from `main`. See the
 [Releases page](https://github.com/Jolly-Panda-Works/DeskPresence/releases) for every build's notes.
 
+## 1.4
+
+- Floating timer widget (water, break, time at the desk, eye-control and webcam buttons).
+- “I drank water” button in the reminder, the widget, the tray menu and Settings; “In 10 minutes” snoozes.
+- Timers count only time at the desk: they pause while you are away; 10+ minutes away restarts the break and stand-up timers.
+- Phone calls through Windows Phone Link pause music and video; music resumes afterwards.
+- Webcam sharing now notices video apps starting (Windows does not report failed camera opens), plus a manual Release / Take back button.
+- Eye control on/off from the widget, the tray menu or Ctrl+Alt+E.
+- Laptop link: settings save automatically, discovery asks every address on the home network (works with VPNs and routers that drop broadcasts), “Allow in firewall” button, clearer error messages.
+
 ## 1.3
 
 - Settings window for every option: live webcam preview, phone range test, laptop pairing with automatic discovery and a connection test.

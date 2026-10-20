@@ -42,6 +42,7 @@ DEFAULTS = {
 
     # --- actions ---
     "pause_media": True,
+    "pause_on_call": True,            # pause media during phone calls (Windows Phone Link)
     # per-app media handling, chosen from the tray menu: app id -> "auto" | "music" | "video" | "ignore"
     # music = pause + resume, video = pause only, ignore = leave alone
     "media_apps": {},
@@ -49,6 +50,8 @@ DEFAULTS = {
     "lock_after_away_minutes": 0,     # 0 = never lock
     "break_reminder_minutes": 50,     # 0 = off
     "water_reminder_minutes": 60,     # 0 = off
+    # timers only count time at the desk; an absence this long resets the break / stand-up timers
+    "timer_reset_away_minutes": 10,
 
     # after work_minutes at the desk, the screens are covered for a break.
     # The break countdown only runs while the camera does NOT see you.
@@ -75,6 +78,9 @@ DEFAULTS = {
         "desktop_hotkey": 1,   # Ctrl+Alt+F1
         "laptop_hotkey": 2,    # Ctrl+Alt+F2
     },
+
+    # --- floating timer widget ---
+    "widget": {"enabled": True, "x": None, "y": None},
 
     # --- notifications ---
     "notification_monitor": -1,       # -1 = primary, else index counted left to right from 0

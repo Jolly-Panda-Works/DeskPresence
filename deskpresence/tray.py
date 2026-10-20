@@ -64,6 +64,7 @@ class Tray:
     def __init__(self, ctrl, cfg, ui):
         self.ctrl, self.cfg, self.ui = ctrl, cfg, ui
         self._settings = None
+        self.widget = None
         I, M = pystray.MenuItem, pystray.Menu
 
         def tr(key):  # menu text is evaluated each time the menu is rebuilt
@@ -83,6 +84,14 @@ class Tray:
             M.SEPARATOR,
             I(tr("menu.open_settings"), self.open_settings, default=True),
             I(tr("menu.pause"), self._toggle_pause, checked=lambda _: ctrl.paused),
+            I(tr("menu.drank"), lambda: ctrl.drank_water(),
+              visible=lambda _: cfg["water_reminder_minutes"] > 0 and ctrl.uses_camera),
+            I(tr("menu.eyes"), lambda: ctrl.set_eye_follow(cfg["mouse_mode"] != "eyes"),
+              checked=lambda _: cfg["mouse_mode"] == "eyes", visible=cam),
+            I(tr("menu.widget"), lambda: self.widget and self.widget.set_visible(not cfg["widget"]["enabled"]),
+              checked=lambda _: cfg["widget"]["enabled"]),
+            I(lambda _: t("menu.cam_take") if ctrl.camera_lent_to else t("menu.cam_give"),
+              lambda: ctrl.take_camera_back() if ctrl.camera_lent_to else ctrl.release_camera(), visible=cam),
             I(tr("menu.mouse"), M(
                 mouse_item("off", "set.mouse_off"),
                 mouse_item("monitor", "set.mouse_monitor"),
@@ -148,6 +157,8 @@ class Tray:
             key = "paused"
         elif self.ctrl.status == "camera_error":
             key = "error"
+        elif self.ctrl.status in ("camera_busy", "camera_lent"):
+            key = "paused"
         elif self.ctrl.break_active:
             key = "break"
         else:
@@ -184,7 +195,16 @@ class Tray:
         if self._settings is not None and self._settings.alive:
             self._settings.lift()
             return
-        self._settings = SettingsWindow(self.ui, self.ctrl, self.cfg, self.refresh)
+        self._settings = SettingsWindow(self.ui, self.ctrl, self.cfg, self._after_settings_saved)
+
+    def _after_settings_saved(self):  # Tk thread
+        self.refresh()
+        if self.widget:
+            if self.cfg["widget"]["enabled"] and self.ctrl.uses_camera:
+                self.widget.show()
+                self.widget.rebuild()  # language may have changed
+            else:
+                self.widget.hide()
 
     def _toggle_autostart(self):
         set_autostart(not autostart_enabled())
@@ -193,6 +213,8 @@ class Tray:
         self.cfg.set("language", code)
         set_language(code)
         self.refresh()
+        if self.widget:
+            self.ui.call(self.widget.rebuild)
 
     def _reload(self):
         self.ctrl.reload()

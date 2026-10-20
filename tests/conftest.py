@@ -11,6 +11,10 @@ from deskpresence.vision import Observation  # noqa: E402
 
 
 class FakeConfig(dict):
+    @property
+    def data(self):
+        return self
+
     def set(self, key, value):
         self[key] = value
 
@@ -22,6 +26,7 @@ class FakeUI:
     def __init__(self):
         self.log = []
         self.last_break = None
+        self.pending = None
 
     def popup(self, title, *_a):
         self.log.append(("popup", title))
@@ -34,6 +39,10 @@ class FakeUI:
 
     def break_hide(self):
         self.log.append(("hide",))
+
+    def ask(self, title, body, yes, no, callback, monitor, timeout=45):
+        self.log.append(("popup", title))
+        self.pending = callback
 
 
 class Sim:

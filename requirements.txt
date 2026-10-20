@@ -1,6 +1,7 @@
 opencv-contrib-python>=4.8
 mediapipe>=0.10.14
 customtkinter>=5.2
+pycaw>=20240316
 numpy>=1.26
 pystray>=0.19.5
 Pillow>=10.0
