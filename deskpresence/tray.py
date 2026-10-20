@@ -9,6 +9,7 @@ from PIL import Image, ImageDraw
 
 from . import APP_NAME, winapi
 from .config import APP_DIR, CONFIG_PATH
+from .media import AUTO, MODES
 from .i18n import LANGUAGES, language, set_language, t
 
 log = logging.getLogger(__name__)
@@ -85,6 +86,7 @@ class Tray:
             M.SEPARATOR,
             I(tr("menu.autostart"), self._toggle_autostart, checked=lambda _: autostart_enabled()),
             I(tr("menu.language"), M(lang_item("fa"), lang_item("en"))),
+            I(tr("menu.media"), M(self._media_items), visible=lambda _: cfg["pause_media"]),
             I(tr("menu.settings"), lambda: os.startfile(CONFIG_PATH)),
             I(tr("menu.reload"), self._reload),
             I(tr("menu.folder"), lambda: os.startfile(APP_DIR)),
@@ -93,6 +95,30 @@ class Tray:
             I(tr("menu.quit"), self._quit),
         )
         self.icon = pystray.Icon(APP_NAME, _icon(COLORS["present"]), APP_NAME, menu)
+
+    def _media_items(self):
+        """Built each time the submenu opens: every media app Windows has reported so far."""
+        I, M = pystray.MenuItem, pystray.Menu
+        seen = self.ctrl.media.scan()
+        if not seen:
+            yield I(t("media.scan_hint"), None, enabled=False)
+            return
+        overrides = self.cfg["media_apps"]
+
+        def choice(key, mode):
+            return I(t("media." + mode), lambda: self._set_media_mode(key, mode), radio=True,
+                     checked=lambda _: overrides.get(key, AUTO) == mode)
+
+        for key, (name, kind) in sorted(seen.items(), key=lambda kv: kv[1][0].lower()):
+            yield I(f"{name}  ({t('media.kind.' + kind)})", M(*(choice(key, m) for m in MODES)))
+
+    def _set_media_mode(self, key, mode):
+        apps = dict(self.cfg["media_apps"])
+        if mode == AUTO:
+            apps.pop(key, None)
+        else:
+            apps[key] = mode
+        self.cfg.set("media_apps", apps)
 
     def _status_text(self):
         text = f"{t('role.' + self.ctrl.role)}: {t('status.' + self.ctrl.status)}"

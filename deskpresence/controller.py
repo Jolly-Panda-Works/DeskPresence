@@ -20,7 +20,7 @@ class Controller:
     def __init__(self, cfg, ui):
         self.cfg, self.ui = cfg, ui
         self.on_state = lambda: None
-        self.media = MediaController()
+        self.media = MediaController(cfg)
         self.state = PRESENT
         self.paused = False
         self.calibrating = False

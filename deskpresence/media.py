@@ -1,10 +1,20 @@
-"""Pause / resume whatever is playing, via Windows' media sessions (SMTC).
+"""Pause / resume media through Windows' media sessions (SMTC).
 
-Only sessions that were actually playing are paused, and only those are resumed,
-so music you had paused yourself is never started by accident.
+Every app that plays audio or video through Windows' media controls (the ones shown in the
+volume flyout) is detected automatically. Each one is classified as:
+
+  music  -> paused when you leave, resumed when you come back   (Spotify, Radio Javan, ...)
+  video  -> paused when you leave, NOT resumed                  (YouTube, Movies & TV, ...)
+  ignore -> left alone
+
+Classification order: your choice in the tray menu -> the built-in list of known apps ->
+what the app itself reports to Windows (music / video) -> for browsers, a track with an
+album is music, anything else is video.
+Only sessions that were actually playing are paused, and only those are resumed.
 """
 import asyncio
 import logging
+import threading
 
 from . import winapi
 
@@ -13,6 +23,7 @@ log = logging.getLogger(__name__)
 try:
     import winrt.windows.foundation  # noqa: F401
     import winrt.windows.foundation.collections  # noqa: F401
+    import winrt.windows.media  # noqa: F401  (MediaPlaybackType)
     from winrt.windows.media.control import (
         GlobalSystemMediaTransportControlsSessionManager as SessionManager,
         GlobalSystemMediaTransportControlsSessionPlaybackStatus as PlaybackStatus,
@@ -22,39 +33,163 @@ except Exception:  # pragma: no cover - depends on the machine
     log.warning("WinRT media control unavailable, falling back to the media key")
     HAVE_SMTC = False
 
+AUTO, MUSIC, VIDEO, IGNORE = "auto", "music", "video", "ignore"
+MODES = (AUTO, MUSIC, VIDEO, IGNORE)
+
+# MediaPlaybackType values reported by apps
+_TYPE_MUSIC, _TYPE_VIDEO = 1, 2
+
+# (substring of the app id, kind or None = ask the app, display name)
+KNOWN_APPS = [
+    ("spotify", MUSIC, "Spotify"),
+    ("radiojavan", MUSIC, "Radio Javan"),
+    ("radio javan", MUSIC, "Radio Javan"),
+    ("zunemusic", None, "Media Player"),            # Windows 11 Media Player: music and video
+    ("zunevideo", VIDEO, "Movies & TV"),
+    ("wmplayer", None, "Windows Media Player"),
+    ("cinhimbnkkaeohfgghhklpknlkffjgod", MUSIC, "YouTube Music"),  # Chrome/Edge app
+    ("agimnkijcamfeangaknmldooml", VIDEO, "YouTube"),               # Chrome/Edge app
+    ("youtube music", MUSIC, "YouTube Music"),
+    ("youtube", VIDEO, "YouTube"),
+    ("applemusic", MUSIC, "Apple Music"),
+    ("itunes", MUSIC, "iTunes"),
+    ("foobar2000", MUSIC, "foobar2000"),
+    ("aimp", MUSIC, "AIMP"),
+    ("musicbee", MUSIC, "MusicBee"),
+    ("winamp", MUSIC, "Winamp"),
+    ("deezer", MUSIC, "Deezer"),
+    ("tidal", MUSIC, "TIDAL"),
+    ("soundcloud", MUSIC, "SoundCloud"),
+    ("amazonmusic", MUSIC, "Amazon Music"),
+    ("vlc", None, "VLC"),
+    ("mpc-hc", VIDEO, "MPC-HC"),
+    ("mpc-be", VIDEO, "MPC-BE"),
+    ("potplayer", VIDEO, "PotPlayer"),
+    ("kmplayer", VIDEO, "KMPlayer"),
+    ("netflix", VIDEO, "Netflix"),
+    ("primevideo", VIDEO, "Prime Video"),
+    ("disney", VIDEO, "Disney+"),
+]
+
+BROWSERS = [
+    ("msedge", "Microsoft Edge"),
+    ("chrome", "Google Chrome"),
+    ("308046b0af4a39cb", "Firefox"),
+    ("firefox", "Firefox"),
+    ("opera", "Opera"),
+    ("brave", "Brave"),
+    ("vivaldi", "Vivaldi"),
+]
+
+
+def app_key(aumid):
+    return (aumid or "").strip().lower()
+
+
+def display_name(aumid):
+    key = app_key(aumid)
+    for needle, _kind, name in KNOWN_APPS:
+        if needle in key:
+            return name
+    for needle, name in BROWSERS:
+        if needle in key:
+            return name
+    name = (aumid or "?").split("!")[-1]
+    if name.lower().endswith(".exe"):
+        name = name[:-4]
+    return name
+
+
+def is_browser(aumid):
+    key = app_key(aumid)
+    return any(n in key for n, _ in BROWSERS) and not any(n in key for n, _k, _d in KNOWN_APPS)
+
+
+def classify(aumid, playback_type=0, album="", overrides=None):
+    """Returns MUSIC, VIDEO or IGNORE for a media session."""
+    key = app_key(aumid)
+    mode = (overrides or {}).get(key, AUTO)
+    if mode in (MUSIC, VIDEO, IGNORE):
+        return mode
+    for needle, kind, _name in KNOWN_APPS:
+        if needle in key:
+            if kind:
+                return kind
+            break
+    if is_browser(aumid):
+        # browsers report every tab as "music"; a real track has an album, a video does not
+        return MUSIC if album else VIDEO
+    if playback_type == _TYPE_VIDEO:
+        return VIDEO
+    return MUSIC
+
 
 class MediaController:
-    def __init__(self):
-        self._paused_ids = []
+    def __init__(self, cfg=None):
+        self.cfg = cfg
+        self._resume_ids = []
         self._fallback_paused = False
+        self.seen = {}  # app key -> (display name, last detected kind)
+        self._lock = threading.Lock()
+
+    def _overrides(self):
+        return dict(self.cfg["media_apps"]) if self.cfg is not None else {}
+
+    async def _sessions(self):
+        mgr = await SessionManager.request_async()
+        out = []
+        for s in mgr.get_sessions():
+            aumid = s.source_app_user_model_id
+            ptype, album = 0, ""
+            try:
+                props = await s.try_get_media_properties_async()
+                ptype = int(props.playback_type or 0)
+                album = props.album_title or ""
+            except Exception:
+                pass
+            kind = classify(aumid, ptype, album, self._overrides())
+            with self._lock:
+                self.seen[app_key(aumid)] = (display_name(aumid), kind)
+            out.append((s, aumid, kind))
+        return out
 
     async def _pause(self):
-        mgr = await SessionManager.request_async()
-        paused = []
-        for s in mgr.get_sessions():
+        resume = []
+        for s, aumid, kind in await self._sessions():
             try:
-                if s.get_playback_info().playback_status == PlaybackStatus.PLAYING:
-                    if await s.try_pause_async():
-                        paused.append(s.source_app_user_model_id)
+                if kind == IGNORE or s.get_playback_info().playback_status != PlaybackStatus.PLAYING:
+                    continue
+                if await s.try_pause_async():
+                    log.info("Paused %s (%s)", aumid, kind)
+                    if kind == MUSIC:
+                        resume.append(aumid)
             except Exception:
                 log.exception("Pausing a session failed")
-        return paused
+        return resume
 
     async def _resume(self, ids):
-        mgr = await SessionManager.request_async()
-        for s in mgr.get_sessions():
+        for s, aumid, _kind in await self._sessions():
             try:
-                if s.source_app_user_model_id in ids and \
-                        s.get_playback_info().playback_status != PlaybackStatus.PLAYING:
+                if aumid in ids and s.get_playback_info().playback_status != PlaybackStatus.PLAYING:
                     await s.try_play_async()
+                    log.info("Resumed %s", aumid)
             except Exception:
                 log.exception("Resuming a session failed")
+
+    def scan(self):
+        """Refresh the list of media apps Windows knows about (for the tray menu)."""
+        if HAVE_SMTC:
+            try:
+                asyncio.run(self._sessions())
+            except Exception:
+                log.debug("Media scan failed", exc_info=True)
+        with self._lock:
+            return dict(self.seen)
 
     def pause(self):
         if HAVE_SMTC:
             try:
-                self._paused_ids = asyncio.run(self._pause())
-                log.info("Paused media: %s", self._paused_ids)
+                self._resume_ids = asyncio.run(self._pause())
                 return
             except Exception:
                 log.exception("SMTC pause failed")
@@ -62,13 +197,12 @@ class MediaController:
         self._fallback_paused = True
 
     def resume(self):
-        if HAVE_SMTC and self._paused_ids:
+        if HAVE_SMTC and self._resume_ids:
             try:
-                asyncio.run(self._resume(self._paused_ids))
-                log.info("Resumed media: %s", self._paused_ids)
+                asyncio.run(self._resume(self._resume_ids))
             except Exception:
                 log.exception("SMTC resume failed")
-            self._paused_ids = []
+            self._resume_ids = []
         elif self._fallback_paused:
             winapi.press_media_play_pause()
         self._fallback_paused = False

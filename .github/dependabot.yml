@@ -1,10 +1,19 @@
 version: 2
 updates:
+  # requirements use ">=" ranges, so new versions are picked up by every build anyway;
+  # Dependabot only opens a PR when a range has to change, and groups everything into one PR.
   - package-ecosystem: pip
     directory: "/"
     schedule:
       interval: monthly
+    versioning-strategy: increase-if-necessary
+    groups:
+      python-packages:
+        patterns: ["*"]
   - package-ecosystem: github-actions
     directory: "/"
     schedule:
       interval: monthly
+    groups:
+      github-actions:
+        patterns: ["*"]

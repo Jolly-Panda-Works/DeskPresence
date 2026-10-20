@@ -4,7 +4,8 @@ name: Build Windows EXE and Release
 # a git tag and a public GitHub Release with DeskPresence.exe attached.
 on:
   push:
-    branches: ["**"]
+    # Dependabot branches are built through their pull request instead
+    branches: ["**", "!dependabot/**"]
     tags: ["v*"]
   pull_request:
   workflow_dispatch:

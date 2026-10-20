@@ -29,6 +29,9 @@ DEFAULTS = {
 
     # --- actions ---
     "pause_media": True,
+    # per-app media handling, chosen from the tray menu: app id -> "auto" | "music" | "video" | "ignore"
+    # music = pause + resume, video = pause only, ignore = leave alone
+    "media_apps": {},
     "turn_off_monitors": True,
     "lock_after_away_minutes": 0,     # 0 = never lock
     "break_reminder_minutes": 50,     # 0 = off

@@ -3,6 +3,11 @@
 Release builds are published automatically from `main`. See the
 [Releases page](https://github.com/Jolly-Panda-Works/DeskPresence/releases) for every build's notes.
 
+## 1.2
+
+- Music and video are handled differently: music (Spotify, Radio Javan, Media Player, ...) is paused and resumed; videos (YouTube, Media Player, Movies & TV, ...) are only paused.
+- Media apps are detected automatically; tray menu → Music & video apps lets you change any app.
+
 ## 1.1
 
 - Hourly water reminder.

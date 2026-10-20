@@ -20,8 +20,8 @@
 
 | | |
 |---|---|
-| **Leave the desk** | No face for ~10 seconds (and no keyboard/mouse use) → the music that is playing pauses and all monitors turn off. The PC keeps running. |
-| **Come back** | Monitors turn back on and only the music DeskPresence paused starts again. |
+| **Leave the desk** | No face for ~10 seconds (and no keyboard/mouse use) → music and videos pause and all monitors turn off. The PC keeps running. |
+| **Come back** | Monitors turn back on and the **music** DeskPresence paused plays again. Videos stay paused. |
 | **Mouse follows your gaze** | After a 10-second calibration, the cursor jumps to the monitor you turn to, back to where it was on that monitor. |
 | **Water reminder** | Every hour: “Time to drink water!” (waits until you are at the desk). |
 | **Forced break** | After 90 minutes of work, every screen is covered for a 10-minute break. The countdown **only runs while the camera does not see you**, so sitting there does not count. Leaving for 10+ minutes on your own counts as a break too. |
@@ -30,6 +30,18 @@
 | **Persian and English** | Switch from the tray menu → Language. |
 
 Everything runs locally. Webcam frames are processed in memory and are never saved or uploaded. See [PRIVACY.md](PRIVACY.md).
+
+## Music & video apps
+
+Apps are detected automatically through Windows' media controls, which list every app that shows up in the volume flyout:
+
+| Kind | When you leave | When you come back | Examples |
+|---|---|---|---|
+| Music | pause | play again | Spotify, Radio Javan, Media Player (music), YouTube Music, foobar2000, AIMP, MusicBee, Apple Music, Deezer |
+| Video | pause | stays paused | YouTube, Media Player (video), Movies & TV, VLC (video), PotPlayer, MPC-HC, Netflix |
+
+Apps that are not in the built-in list are classified by what they report to Windows (music or video). Browser tabs count as music when the track has an album (YouTube Music, Spotify web, ...) and as video otherwise.
+To change any app: tray menu → **Music & video apps** → *Music: pause and resume* / *Video: pause only* / *Leave alone*. An app appears in that list once it has played something.
 
 ## Download
 
