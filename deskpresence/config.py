@@ -80,7 +80,8 @@ DEFAULTS = {
     },
 
     # --- floating timer widget ---
-    "widget": {"enabled": True, "x": None, "y": None},
+    "widget": {"enabled": True, "x": None, "y": None, "minimized": False,
+               "opacity": 90},          # percent; the widget is fully opaque while the mouse is over it
 
     # --- notifications ---
     "notification_monitor": -1,       # -1 = primary, else index counted left to right from 0

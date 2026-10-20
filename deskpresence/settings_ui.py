@@ -315,6 +315,8 @@ class SettingsWindow:
             button_hover_color=FG, fg_color=FIELD, width=46,
             command=lambda: set_autostart(self.autostart_var.get())))
         self._switch(c, t("menu.widget"), "widget.enabled", hint=t("set.widget_hint"))
+        self._slider(c, t("set.widget_opacity"), "widget.opacity", 30, 100, 5, unit="%",
+                     hint=t("set.widget_opacity_hint"))
         self._choice(c, t("set.role"), "role",
                      [("desktop", t("set.role_desktop")), ("laptop", t("set.role_laptop"))],
                      hint=t("set.role_hint"))

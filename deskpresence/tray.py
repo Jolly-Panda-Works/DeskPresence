@@ -202,7 +202,7 @@ class Tray:
         if self.widget:
             if self.cfg["widget"]["enabled"] and self.ctrl.uses_camera:
                 self.widget.show()
-                self.widget.rebuild()  # language may have changed
+                self.widget.language_changed()
             else:
                 self.widget.hide()
 

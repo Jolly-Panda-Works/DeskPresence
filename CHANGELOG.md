@@ -11,6 +11,7 @@ Release builds are published automatically from `main`. See the
 - The PC is the server (encrypted HTTPS, pinned certificate, found automatically on the Wi-Fi network).
 - Every unhandled error is written to log.txt, native crashes to crash.txt.
 - After sleep or hibernation every timer (water, break, stand-up) starts over; after a restart they already do.
+- Widget: title bar with minimize (one-line bar) and close buttons, adjustable transparency (right-click, Ctrl + mouse wheel or Settings; fully opaque under the mouse), drag from anywhere.
 
 ## 1.4
 
