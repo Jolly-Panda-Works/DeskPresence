@@ -3,7 +3,9 @@
 Release builds are published automatically from `main`. See the
 [Releases page](https://github.com/Jolly-Panda-Works/DeskPresence/releases) for every build's notes.
 
-## 1.5
+## 1.7
+
+(1.6 was the first build with the phone app; that work now lives on the `mobile-app` branch.)
 
 - Fixed: the app crashed now and then. The list of music and video apps was read from Windows' media controls on several threads; all media access now runs on one thread, and the tray menu reads a cached list.
 - Every unhandled error is written to log.txt, native crashes to crash.txt.
