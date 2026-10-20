@@ -84,7 +84,9 @@ The phone shows:
 - **Watch the webcam**: a live picture; while anyone watches, a banner on your monitor says *“Sara is watching you through the webcam”*
 - **Send a message**: it pops up on the PC's screen
 
-Pair as many phones as you like; each one has its own name (rename it in Settings → Mobile app or in the phone's menu), its own webcam permission, and can be removed at any time. The PC is the server: nothing goes through the internet. To use the app away from home, put both devices in a private network such as [Tailscale](https://tailscale.com/) and type the PC's Tailscale address in the app.
+**Away from home:** run the small relay server on your own VPS ([relay/README.md](relay/README.md), one command) and enter its address in Settings → Mobile app. The phone then uses Wi-Fi at home and the relay everywhere else, automatically. Pair by **QR code**, **link** or **code**. In the app's **People** tab, phones share their status with each other: available / busy / driving / in a meeting / sleeping or a custom message, battery, whether they are on a call, and when they were last active.
+
+Pair as many phones as you like; each one has its own name (rename it in Settings → Mobile app or in the phone's menu), its own webcam permission, and can be removed at any time. At home the phone talks to the PC directly. Through the relay everything is end-to-end encrypted (P-256 ECDH + AES-256-GCM): the relay forwards sealed data and cannot see the webcam picture, messages or statuses.
 
 **Security:** the connection is encrypted (HTTPS). The PC creates its own certificate and the phone remembers it when pairing, so another device cannot pretend to be your PC later. A pairing code works once, for 10 minutes, and five wrong tries cancel it. The PC stores only a hash of each phone's key.
 

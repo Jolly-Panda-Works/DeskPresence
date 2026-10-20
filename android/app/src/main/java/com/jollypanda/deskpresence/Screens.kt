@@ -130,8 +130,10 @@ fun Header(title: String, subtitle: String? = null, trailing: @Composable () -> 
     }
 }
 
-private fun errorText(e: Throwable, ctx: android.content.Context): String = when {
+fun errorText(e: Throwable, ctx: android.content.Context): String = when {
     e is ApiException && e.code == 403 -> ctx.getString(R.string.err_bad_code)
+    e is ApiException && e.message == "fingerprint_mismatch" -> ctx.getString(R.string.err_certificate)
+    e is ApiException && e.code == 503 -> ctx.getString(R.string.err_pc_offline)
     e is SSLHandshakeException || e.cause is java.security.cert.CertificateException ->
         ctx.getString(R.string.err_certificate)
     else -> ctx.getString(R.string.err_unreachable)
@@ -139,7 +141,7 @@ private fun errorText(e: Throwable, ctx: android.content.Context): String = when
 
 // ---------------------------------------------------------------- pairing
 @Composable
-fun PairScreen(defaultName: String, onPaired: (Pairing) -> Unit) {
+fun PairScreen(defaultName: String, keys: java.security.KeyPair, initialLink: DeskLink.Pc?, onPaired: (Pairing) -> Unit) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val found by remember { discoverPcs(context) }.collectAsState(initial = emptyList())
@@ -150,9 +152,32 @@ fun PairScreen(defaultName: String, onPaired: (Pairing) -> Unit) {
     var busy by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
 
+    fun pair(link: DeskLink.Pc) {
+        busy = true; error = null
+        scope.launch {
+            runCatching { pairWithPc(link, name.ifBlank { defaultName }, keys) }
+                .onSuccess(onPaired)
+                .onFailure { error = errorText(it, context) }
+            busy = false
+        }
+    }
+
+    // a QR code / link carries everything: connect right away
+    LaunchedEffect(initialLink) { initialLink?.let(::pair) }
+    val scanner = rememberQrScanner { text ->
+        when (val link = parseLink(text)) {
+            is DeskLink.Pc -> pair(link)
+            else -> error = context.getString(R.string.err_not_pc_link)
+        }
+    }
+
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(20.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)) {
         Header(stringResource(R.string.pair_title), stringResource(R.string.pair_subtitle))
+
+        PrimaryButton("⌖  " + stringResource(R.string.scan_qr), enabled = !busy) { scanner.launch(scanOptions(context)) }
+        Text(stringResource(R.string.scan_or_link), color = Palette.Faint, fontSize = 13.sp,
+            modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center)
 
         Card {
             SectionLabel(stringResource(R.string.pair_found))
@@ -182,8 +207,11 @@ fun PairScreen(defaultName: String, onPaired: (Pairing) -> Unit) {
                 }
             }
             Spacer(Modifier.height(12.dp))
-            field(address, { address = it.trim(); if (it.isNotBlank()) selected = null },
-                stringResource(R.string.pair_address), KeyboardType.Uri, stringResource(R.string.pair_address_hint))
+            field(address, { v ->
+                // a pasted pairing link works too
+                val link = parseLink(v)
+                if (link is DeskLink.Pc) pair(link) else { address = v.trim(); if (v.isNotBlank()) selected = null }
+            }, stringResource(R.string.pair_address), KeyboardType.Uri, stringResource(R.string.pair_address_hint))
         }
 
         Card {
@@ -195,36 +223,27 @@ fun PairScreen(defaultName: String, onPaired: (Pairing) -> Unit) {
 
         error?.let { Text(it, color = Palette.Red, fontSize = 14.sp) }
 
-        val target: Pair<String, Int>? = selected?.let { it.host to it.port }
-            ?: address.takeIf { it.isNotBlank() }?.let {
-                val host = it.substringBefore(':')
-                val port = it.substringAfter(':', "").toIntOrNull() ?: Api.DEFAULT_PORT
-                host to port
-            }
+        val lan: String? = selected?.let { "${it.host}:${it.port}" }
+            ?: address.takeIf { it.isNotBlank() }?.let { if (':' in it) it else "$it:${Api.DEFAULT_PORT}" }
         PrimaryButton(
             if (busy) stringResource(R.string.pair_working) else stringResource(R.string.pair_button),
-            enabled = !busy && code.length == 6 && target != null,
+            enabled = !busy && code.length == 6 && lan != null,
         ) {
-            val (host, port) = target ?: return@PrimaryButton
-            busy = true; error = null
-            scope.launch {
-                runCatching { Api(host, port, pin = null, token = null).pair(code, name.ifBlank { defaultName }) }
-                    .onSuccess(onPaired)
-                    .onFailure { error = errorText(it, context) }
-                busy = false
-            }
+            pair(DeskLink.Pc(code, keyFp = "", tlsFp = selected?.fingerprintPrefix.orEmpty(), lan = lan ?: return@PrimaryButton,
+                hub = "", relay = ""))
         }
-        if (target == null) Text(stringResource(R.string.pair_choose), color = Palette.Faint, fontSize = 13.sp,
+        if (lan == null) Text(stringResource(R.string.pair_choose), color = Palette.Faint, fontSize = 13.sp,
             modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center)
     }
 }
 
 // ---------------------------------------------------------------- home
 @Composable
-fun HomeScreen(pairing: Pairing, onWatch: () -> Unit, onMoved: (String, Int) -> Unit, onUnpair: () -> Unit) {
+fun HomeScreen(pairing: Pairing, keys: java.security.KeyPair, onWatch: () -> Unit, onMoved: (String, Int) -> Unit,
+               onUnpair: () -> Unit) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
-    val api = remember(pairing) { Api(pairing.host, pairing.port, pairing.fingerprint, pairing.token) }
+    val api = remember(pairing) { DeskClient(pairing, keys) }
     var status by remember { mutableStateOf<DeskStatus?>(null) }
     var lastOk by remember { mutableStateOf(0L) }
     var offline by remember { mutableStateOf(false) }
@@ -299,7 +318,8 @@ fun HomeScreen(pairing: Pairing, onWatch: () -> Unit, onMoved: (String, Int) -> 
 
         if (offline) Text(stringResource(R.string.offline, pairing.pcName), color = Palette.Amber, fontSize = 13.sp)
         else if (lastOk > 0) Text(
-            stringResource(R.string.updated, DateUtils.getRelativeTimeSpanString(lastOk).toString()),
+            stringResource(R.string.updated, DateUtils.getRelativeTimeSpanString(lastOk).toString()) + "  ·  " +
+                stringResource(if (api.viaRelay) R.string.via_relay else R.string.via_local),
             color = Palette.Faint, fontSize = 12.sp, modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center)
         toast?.let { Text(it, color = Palette.Green, modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center) }
     }
@@ -398,12 +418,12 @@ private fun TextDialog(title: String, hint: String?, initial: String, confirm: S
 
 // ---------------------------------------------------------------- camera
 @Composable
-fun CameraScreen(pairing: Pairing, onClose: () -> Unit) {
+fun CameraScreen(pairing: Pairing, keys: java.security.KeyPair, onClose: () -> Unit) {
     val context = LocalContext.current
     var frame by remember { mutableStateOf<Bitmap?>(null) }
     var error by remember { mutableStateOf<String?>(null) }
     LaunchedEffect(pairing) {
-        val api = Api(pairing.host, pairing.port, pairing.fingerprint, pairing.token)
+        val api = DeskClient(pairing, keys)
         runCatching { api.watchCamera { frame = it } }
             .onFailure { e ->
                 if (e !is kotlinx.coroutines.CancellationException) {

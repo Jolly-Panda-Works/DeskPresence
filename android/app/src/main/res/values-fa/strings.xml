@@ -50,4 +50,49 @@
     <string name="connecting">در حال اتصال به وبکم…</string>
     <string name="camera_notice">روی صفحه %1$s نوشته می‌شود که شما در حال تماشا هستید.</string>
     <string name="close">بستن</string>
+
+    <!-- remote + links -->
+    <string name="scan_qr">اسکن QR</string>
+    <string name="scan_prompt">دوربین را روی کد QR بگیرید</string>
+    <string name="scan_or_link">کد QR روی صفحه کامپیوتر را اسکن کنید، لینک اتصال را باز کنید، یا در همان وای‌فای از کد زیر استفاده کنید.</string>
+    <string name="err_not_pc_link">این کد QR مربوط به اتصال کامپیوتر در DeskPresence نیست.</string>
+    <string name="err_not_invite">این دعوت DeskPresence نیست.</string>
+    <string name="err_pc_offline">کامپیوتر خاموش است یا به اینترنت وصل نیست.</string>
+    <string name="err_relay">سرور واسط در دسترس نیست. اتصال اینترنت را بررسی کنید.</string>
+    <string name="via_relay">از طریق اینترنت</string>
+    <string name="via_local">از طریق وای‌فای</string>
+
+    <!-- tabs -->
+    <string name="tab_pc">کامپیوتر</string>
+    <string name="tab_people">افراد</string>
+
+    <!-- people -->
+    <string name="people_title">افراد</string>
+    <string name="people_subtitle">وضعیت خود را با گوشی‌های دیگر به اشتراک بگذارید</string>
+    <string name="relay_title">سرور واسط</string>
+    <string name="relay_hint">همان آدرسی که در کامپیوتر وارد کرده‌اید (تنظیمات ← موبایل ← آدرس سرور واسط). بعد از اتصال به کامپیوتر یا باز کردن لینک دعوت، خودکار پر می‌شود.</string>
+    <string name="relay_address">آدرس سرور واسط</string>
+    <string name="need_relay">اول آدرس سرور واسط را وارد کنید.</string>
+    <string name="save">ذخیره</string>
+    <string name="my_status">وضعیت من</string>
+    <string name="my_name">نام من</string>
+    <string name="status_text">پیام وضعیت (اختیاری)</string>
+    <string name="status_auto">باتری، تماس و زمان خودکار اضافه می‌شوند و هر ۱۵ دقیقه ارسال می‌شوند، حتی وقتی برنامه بسته است.</string>
+    <string name="st_available">در دسترس</string>
+    <string name="st_busy">مشغول</string>
+    <string name="st_driving">در حال رانندگی</string>
+    <string name="st_meeting">در جلسه</string>
+    <string name="st_sleeping">خواب</string>
+    <string name="invite">دعوت گوشی</string>
+    <string name="invite_hint">روی گوشی دیگر: افراد ← پیوستن، بعد این QR را اسکن کنید یا کد را وارد کنید. یا لینک را بفرستید.</string>
+    <string name="waiting_other">منتظر گوشی دیگر…</string>
+    <string name="share_link">ارسال لینک</string>
+    <string name="join">پیوستن</string>
+    <string name="join_hint">کد ۶ رقمی گوشی دیگر را وارد کنید یا کد QR آن را اسکن کنید.</string>
+    <string name="no_contacts">هنوز گوشی‌ای اضافه نشده. یک گوشی دعوت کنید یا با کد بپیوندید.</string>
+    <string name="no_status_yet">هنوز وضعیتی نیامده</string>
+    <string name="in_call">در حال تماس</string>
+    <string name="connected_to">به %1$s وصل شدید ✓</string>
+    <string name="remove">حذف</string>
+    <string name="remove_confirm">اشتراک وضعیت با %1$s متوقف شود؟</string>
 </resources>

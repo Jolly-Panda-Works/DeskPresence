@@ -3,6 +3,14 @@
 Release builds are published automatically from `main`. See the
 [Releases page](https://github.com/Jolly-Panda-Works/DeskPresence/releases) for every build's notes.
 
+## 1.6
+
+- Access from outside the home network through your own relay server (relay/: Docker + Caddy, one-command install); works on mobile data and behind CGNAT.
+- End-to-end encryption between phone and PC (P-256 ECDH + AES-256-GCM); the relay only forwards sealed data, including the webcam picture.
+- Pair a phone by QR code, link or code; the link opens the app.
+- Phones share their status with each other (available / busy / driving / meeting / sleeping or custom text, battery, on a call, last active), every 15 minutes even with the app closed.
+- The phone app picks Wi-Fi when the PC is reachable there and the relay otherwise.
+
 ## 1.5
 
 - Android app: working / not here / on a break, glasses of water and hours worked today, live webcam view and messages to the PC.

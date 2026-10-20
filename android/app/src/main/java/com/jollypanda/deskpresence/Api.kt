@@ -47,6 +47,17 @@ class Api(private val host: String, private val port: Int, private val pin: Stri
 
         fun sha256(bytes: ByteArray): String =
             MessageDigest.getInstance("SHA-256").digest(bytes).joinToString("") { "%02x".format(it) }
+
+        fun parseStatus(r: JSONObject) = DeskStatus(
+            state = r.optString("state", "unknown"),
+            since = r.optLong("since"),
+            waterToday = r.optInt("water_today"),
+            workSecondsToday = r.optLong("work_seconds_today"),
+            cameraAllowed = r.optBoolean("camera_allowed"),
+            cameraAvailable = r.optBoolean("camera_available", true),
+            pcName = r.optString("name"),
+            deviceName = r.optString("device_name"),
+        )
     }
 
     /** Fingerprint of the certificate seen on the last connection. */
@@ -95,27 +106,15 @@ class Api(private val host: String, private val port: Int, private val pin: Stri
 
     suspend fun info(): JSONObject = call("/api/info")
 
-    /** Returns the pairing; the fingerprint is the one seen on this very connection. */
-    suspend fun pair(code: String, name: String): Pairing {
-        val r = call("/api/pair", JSONObject().put("code", code).put("name", name))
+    /** Pairing over the local network; [seenFingerprint] is the certificate of this very connection. */
+    suspend fun pairRaw(code: String, name: String, pub: String): JSONObject {
+        val r = call("/api/pair", JSONObject().put("code", code).put("name", name).put("pub", pub))
         val fp = seenFingerprint ?: throw ApiException(0, "no_certificate")
         if (!fp.equals(r.optString("fingerprint"), ignoreCase = true)) throw ApiException(0, "fingerprint_mismatch")
-        return Pairing(host, port, r.getString("token"), fp, r.optString("device_id"), r.optString("name"))
+        return r
     }
 
-    suspend fun status(): DeskStatus {
-        val r = call("/api/status")
-        return DeskStatus(
-            state = r.optString("state", "unknown"),
-            since = r.optLong("since"),
-            waterToday = r.optInt("water_today"),
-            workSecondsToday = r.optLong("work_seconds_today"),
-            cameraAllowed = r.optBoolean("camera_allowed"),
-            cameraAvailable = r.optBoolean("camera_available", true),
-            pcName = r.optString("name"),
-            deviceName = r.optString("device_name"),
-        )
-    }
+    suspend fun status(): DeskStatus = parseStatus(call("/api/status"))
 
     suspend fun sendMessage(text: String) {
         call("/api/message", JSONObject().put("text", text))
