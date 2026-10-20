@@ -88,6 +88,14 @@ DEFAULTS = {
     "forward_notifications": True,    # laptop role: send laptop toasts to the desktop
     "dismiss_forwarded": False,       # laptop role: remove toast from laptop after forwarding
 
+    # --- Android companion app (server on this PC) ---
+    "mobile": {
+        "enabled": False,
+        "port": 47830,
+        "allow_camera": True,       # phones may watch the webcam (each phone can be switched off too)
+        "devices": {},              # paired phones: id -> {name, token_sha256, created, last_seen, camera}
+    },
+
     # --- network link between desktop and laptop ---
     "network_enabled": False,
     "port": 47821,
@@ -97,7 +105,7 @@ DEFAULTS = {
 
 
 # dicts that are stored as a whole instead of merged key by key with the defaults
-WHOLE_DICTS = ("calibration", "eye_calibration", "media_apps")
+WHOLE_DICTS = ("calibration", "eye_calibration", "media_apps", "devices")
 
 
 def _migrate(user):

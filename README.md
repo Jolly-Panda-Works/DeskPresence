@@ -33,6 +33,7 @@
 | **Forced break** | After 90 minutes of work, every screen is covered for a 10-minute break. The countdown **only runs while the camera does not see you**, so sitting there does not count. Leaving for 10+ minutes on your own counts as a break too. |
 | **Laptop companion** | Run it on your laptop too: its screen and music follow the desktop, it shows the break screen, and its notifications are forwarded to one monitor of the desktop. |
 | **Mouse Without Borders** | Use one mouse and keyboard for both machines (PowerToys). Optionally the cursor even moves to the laptop when you look at it. |
+| **Android app** | See from your phone whether you are working or away, glasses of water and hours worked today; watch the webcam (your monitor shows who is watching) and send messages that pop up on the PC. Pair any number of phones with a 6-digit code. |
 | **Persian and English** | The app and the installer. Switch in Settings → General. |
 
 Everything runs locally. Webcam frames are processed in memory and are never saved or uploaded. See [PRIVACY.md](PRIVACY.md).
@@ -69,6 +70,23 @@ The phone is checked every few seconds. A phone in range answers within a fracti
 ## Sharing the webcam
 
 Most webcams can only be used by one app at a time, and Windows does not tell the app holding it when another app tries and fails. So DeskPresence watches for video apps starting: the well-known ones (Zoom, Teams, Camera, OBS, Skype, Webex, ...) and every app Windows lists as having used the webcam before. When one starts, DeskPresence asks *“Zoom wants to use the webcam — hand it over?”* (or always / never, in Settings → Presence). For a call in the browser (Google Meet, ...) press **Release webcam** in the widget, and **Take webcam back** afterwards. While that app has it, presence comes from your phone, or from keyboard/mouse inactivity (5 minutes by default). When that app is done, DeskPresence takes the webcam back by itself.
+
+## Android app
+
+1. Download **[DeskPresence-Android.apk](https://github.com/Jolly-Panda-Works/DeskPresence/releases/latest/download/DeskPresence-Android.apk)** on the phone and install it (allow “install unknown apps” for your browser when Android asks).
+2. On the PC: Settings → **Mobile app** → turn on *Phones can connect* → **Create a code** (and *Allow in firewall…* once).
+3. In the phone app: tap your PC in the list (or type its address), enter the 6-digit code, **Connect**.
+
+The phone shows:
+
+- **Working / Not here / On a break**, and for how long
+- glasses of water and hours worked today (counted only while you are at the desk)
+- **Watch the webcam**: a live picture; while anyone watches, a banner on your monitor says *“Sara is watching you through the webcam”*
+- **Send a message**: it pops up on the PC's screen
+
+Pair as many phones as you like; each one has its own name (rename it in Settings → Mobile app or in the phone's menu), its own webcam permission, and can be removed at any time. The PC is the server: nothing goes through the internet. To use the app away from home, put both devices in a private network such as [Tailscale](https://tailscale.com/) and type the PC's Tailscale address in the app.
+
+**Security:** the connection is encrypted (HTTPS). The PC creates its own certificate and the phone remembers it when pairing, so another device cannot pretend to be your PC later. A pairing code works once, for 10 minutes, and five wrong tries cancel it. The PC stores only a hash of each phone's key.
 
 ## Laptop setup
 
@@ -131,6 +149,8 @@ Every push builds DeskPresence on `windows-latest` after the tests pass, self-te
 |---|---|---|
 | `main` | `MAJOR.MINOR.<run number>`, e.g. `1.3.42` | Git tag + public GitHub Release with the installer and the portable zip |
 | a tag `vX.Y.Z` | `X.Y.Z` | GitHub Release |
+
+The Android app is built in the same run (`gradle assembleRelease`). Add the repository secrets `ANDROID_KEYSTORE_BASE64`, `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS` and `ANDROID_KEY_PASSWORD` to sign it with your own key; without them it is signed with a debug key (new versions then may not install over old ones).
 | any other branch / PR | `MAJOR.MINOR.0-dev.<run>` | Artifact only |
 
 `MAJOR.MINOR` comes from the [`VERSION`](VERSION) file. The version shows up in the About window, the exe's file properties and the release name.
@@ -147,6 +167,9 @@ deskpresence/
   calls.py          phone calls through Windows Phone Link
   firewall.py       the Windows Firewall rule for the laptop link
   widget.py         the floating timer widget
+  companion.py      HTTPS server for the Android app (pairing, status, webcam stream, messages)
+  stats.py          daily water glasses and work time
+android/            the Android app (Kotlin, Jetpack Compose)
   settings_ui.py    the Settings window (customtkinter)
   media.py          pause / resume through Windows media sessions
   winapi.py         monitors, cursor, power, keyboard (ctypes)

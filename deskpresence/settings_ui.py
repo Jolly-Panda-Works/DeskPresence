@@ -22,7 +22,7 @@ FIELD = "#2A211A"
 OK_GREEN = "#4ADE80"
 DANGER = "#F87171"
 
-SECTIONS = ("general", "presence", "phone", "actions", "health", "mouse", "laptop", "about")
+SECTIONS = ("general", "presence", "phone", "actions", "health", "mouse", "laptop", "mobile", "about")
 
 
 def _get(data, path):
@@ -492,6 +492,98 @@ class SettingsWindow:
             self._switch(c, t("set.laptop_camera"), "laptop_use_camera", hint=t("set.laptop_camera_hint"))
             self._end(c)
 
+    def _sec_mobile(self):
+        c = self._card(t("set.sec.mobile"), t("set.mobile_hint"))
+        self._switch(c, t("set.mobile_on"), "mobile.enabled")
+        self._info(c, t("set.mobile_state"), "mobile_state")
+        port = self.cfg["mobile"]["port"]
+        addrs = "  ".join(f"{a}:{port}" for a in network.local_addresses()[:2]) or "-"
+        self._row(c, t("set.mobile_address"), lambda p: ctk.CTkLabel(p, text=addrs, font=self.f_body, text_color=FG),
+                  hint=t("set.mobile_address_hint"))
+        self._switch(c, t("set.allow_camera"), "mobile.allow_camera", hint=t("set.allow_camera_hint"))
+        self._info(c, t("set.today"), "mobile_today")
+        if self.cfg["role"] == "desktop":
+            self._info(c, t("set.firewall"), "firewall", hint=t("set.firewall_hint"))
+            self._row(c, "", lambda p: self._ghost(p, t("set.firewall_allow"), self._allow_firewall, width=220))
+            self._check_firewall()
+        self._end(c)
+
+        c = self._card(t("set.pair"), t("set.pair_hint"))
+        self._row(c, "", lambda p: self._primary(p, t("set.pair_code"), self._new_code, width=160))
+        self.code_lbl = self._row(c, t("set.code"), lambda p: ctk.CTkLabel(
+            p, text=t("set.code_none"), font=ctk.CTkFont(family=FONT, size=30, weight="bold"), text_color=ORANGE))
+        self._info(c, "", "code_left")
+        self._end(c)
+
+        c = self._card(t("set.devices"))
+        self._device_ids = sorted(self.cfg["mobile"]["devices"])
+        if not self._device_ids:
+            ctk.CTkLabel(c, text=t("set.devices_none"), font=self.f_small, text_color=MUTED).grid(
+                row=c._row, column=0, columnspan=2, padx=18, pady=8, sticky="e" if self.rtl else "w")
+            c._row += 1
+        for device_id in self._device_ids:
+            self._device_row(c, device_id)
+        self._end(c)
+
+    def _device_row(self, card, device_id):
+        from . import companion
+        device = self.cfg["mobile"]["devices"][device_id]
+        name_var = tk.StringVar(value=device.get("name", "?"))
+        cam_var = tk.BooleanVar(value=device.get("camera", True))
+
+        def commit_name(_e=None):
+            companion.rename_device(self.cfg, device_id, name_var.get())
+            self._flash(t("set.saved"))
+
+        def make(p):
+            box = ctk.CTkFrame(p, fg_color="transparent")
+            items = [
+                ctk.CTkEntry(box, textvariable=name_var, width=170, height=32, corner_radius=10, fg_color=FIELD,
+                             border_color=BORDER, border_width=1, text_color=FG, font=self.f_body),
+                ctk.CTkSwitch(box, text=t("set.device_camera"), variable=cam_var, progress_color=ORANGE,
+                              button_color=FG, button_hover_color=FG, fg_color=FIELD, text_color=FG,
+                              font=self.f_small, width=46,
+                              command=lambda: companion.set_device_camera(self.cfg, device_id, cam_var.get())),
+                ctk.CTkButton(box, text=t("set.device_remove"), width=70, height=32, corner_radius=10,
+                              fg_color="transparent", hover_color=PANEL_H, border_width=1, border_color=DANGER,
+                              text_color=DANGER, font=self.f_small, command=lambda: self._remove_device(device_id)),
+            ]
+            items[0].bind("<Return>", commit_name)
+            items[0].bind("<FocusOut>", commit_name)
+            for w in (items[::-1] if self.rtl else items):
+                w.pack(side="left", padx=4)
+            return box
+        self._row(card, "📱 " + device.get("name", "?"), make,
+                  hint=t("set.device_seen", when=self._ago(device.get("last_seen", 0))))
+
+    def _remove_device(self, device_id):
+        from . import companion
+        companion.remove_device(self.cfg, device_id)
+        self.show("mobile")
+
+    @staticmethod
+    def _ago(ts):
+        import time as _time
+        if not ts:
+            return "—"
+        sec = max(0, int(_time.time() - ts))
+        if sec < 90:
+            return t("set.just_now")
+        if sec < 3600:
+            return t("set.minutes_ago", n=sec // 60)
+        if sec < 86400:
+            return t("set.hours_ago", n=sec // 3600)
+        return t("set.days_ago", n=sec // 86400)
+
+    def _new_code(self):
+        comp = self.ctrl.companion
+        if comp is None or not comp.running:
+            self.fields["mobile.enabled"][0].set(True)  # turning it on saves and starts the server
+            self.win.after(2500, self._new_code)
+            return
+        comp.new_code()
+        self._update_live()
+
     def _sec_about(self):
         c = ctk.CTkFrame(self.body, fg_color=PANEL, corner_radius=16, border_width=1, border_color=BORDER)
         c.pack(fill="x", padx=22, pady=18)
@@ -610,6 +702,10 @@ class SettingsWindow:
         self.win.iconify()
         self.ctrl.start_eye_calibration()
 
+    def focus_is_not_typing(self):
+        focus = self.win.focus_get()
+        return not (focus is not None and focus.winfo_class() == "Entry")
+
     def _flash(self, text, color=OK_GREEN):
         self.saved_lbl.configure(text=text, text_color=color)
         self.win.after(3000, lambda: self.alive and self.saved_lbl.configure(text=""))
@@ -706,6 +802,23 @@ class SettingsWindow:
             else:
                 self._set_live("t_break", mins(tm["break_left"]))
             self._set_live("t_sit", mins(tm["sitting"]))
+        if "mobile_state" in self.live:
+            comp = ctrl.companion
+            if comp and comp.running:
+                self._set_live("mobile_state", t("set.mobile_running", port=comp.port), OK_GREEN)
+            elif comp and comp.error:
+                self._set_live("mobile_state", t("set.link_error", err=comp.error[:60]), DANGER)
+            else:
+                self._set_live("mobile_state", t("set.mobile_off"), MUTED)
+            today = ctrl.stats.today()
+            h, m = divmod(today["work_seconds"] // 60, 60)
+            self._set_live("mobile_today", t("set.today_stats", water=today["water"], hours=f"{h}:{m:02d}"))
+            code, left = comp.code() if comp else (None, 0)
+            if getattr(self, "code_lbl", None) is not None and self.code_lbl.winfo_exists():
+                self.code_lbl.configure(text=f"{code[:3]} {code[3:]}" if code else t("set.code_none"))
+            self._set_live("code_left", t("set.code_left", m=left // 60, s=left % 60) if code else "", MUTED)
+            if sorted(self.cfg["mobile"]["devices"]) != self._device_ids and self.focus_is_not_typing():
+                self.show("mobile")  # a phone was paired or removed
         if "link_state" in self.live:
             if not self.cfg["network_enabled"]:
                 self._set_live("link_state", t("set.link_disabled"), MUTED)

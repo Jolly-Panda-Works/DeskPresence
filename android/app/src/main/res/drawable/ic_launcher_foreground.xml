@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- white monitor with a person, dark badge with an orange eye (same artwork as the desktop icon) -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp" android:height="108dp"
+    android:viewportWidth="108" android:viewportHeight="108">
+    <!-- monitor frame -->
+    <path android:fillColor="#00000000" android:strokeColor="#FFFFFF" android:strokeWidth="3.4"
+        android:pathData="M35,33h38a3,3 0,0 1,3 3v26a3,3 0,0 1,-3 3h-38a3,3 0,0 1,-3 -3v-26a3,3 0,0 1,3 -3z" />
+    <!-- stand -->
+    <path android:fillColor="#FFFFFF" android:pathData="M51,65h6v7h-6z" />
+    <path android:fillColor="#FFFFFF" android:pathData="M44,71.5h20a2,2 0,0 1,0 4h-20a2,2 0,0 1,0 -4z" />
+    <!-- person -->
+    <path android:fillColor="#FFFFFF" android:pathData="M54,39.5m-5,0a5,5 0,1 1,10 0a5,5 0,1 1,-10 0" />
+    <path android:fillColor="#FFFFFF" android:pathData="M44,62.5a10,10 0,0 1,20 0z" />
+    <!-- badge -->
+    <path android:fillColor="#110D0A" android:pathData="M71,71m-12,0a12,12 0,1 1,24 0a12,12 0,1 1,-24 0" />
+    <path android:fillColor="#F97316" android:pathData="M63,71c4,-6 12,-6 16,0c-4,6 -12,6 -16,0z" />
+    <path android:fillColor="#110D0A" android:pathData="M71,71m-3.2,0a3.2,3.2 0,1 1,6.4 0a3.2,3.2 0,1 1,-6.4 0" />
+    <path android:fillColor="#F97316" android:pathData="M71,71m-1.6,0a1.6,1.6 0,1 1,3.2 0a1.6,1.6 0,1 1,-3.2 0" />
+</vector>

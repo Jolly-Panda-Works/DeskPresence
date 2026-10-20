@@ -58,6 +58,13 @@ class Sim:
             self.ctrl._process(Observation(face=face), self.clock["t"])
 
 
+@pytest.fixture(autouse=True)
+def _isolated_stats(tmp_path, monkeypatch):
+    """Tests must never write to the real APPDATA folder."""
+    from deskpresence import stats
+    monkeypatch.setattr(stats, "STATS_PATH", str(tmp_path / "stats.json"))
+
+
 @pytest.fixture
 def sim(monkeypatch):
     monkeypatch.setattr(winapi, "idle_seconds", lambda: 100.0)

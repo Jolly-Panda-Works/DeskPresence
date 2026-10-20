@@ -3,6 +3,14 @@
 Release builds are published automatically from `main`. See the
 [Releases page](https://github.com/Jolly-Panda-Works/DeskPresence/releases) for every build's notes.
 
+## 1.5
+
+- Android app: working / not here / on a break, glasses of water and hours worked today, live webcam view and messages to the PC.
+- Pair any number of phones with a 6-digit code; rename them, allow or deny the webcam per phone, remove them.
+- While a phone watches the webcam, a banner on the monitor says who is watching.
+- The PC is the server (encrypted HTTPS, pinned certificate, found automatically on the Wi-Fi network).
+- Every unhandled error is written to log.txt, native crashes to crash.txt.
+
 ## 1.4
 
 - Floating timer widget (water, break, time at the desk, eye-control and webcam buttons).

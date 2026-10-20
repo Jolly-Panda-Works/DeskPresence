@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">DeskPresence</string>
+
+    <!-- pairing -->
+    <string name="pair_title">اتصال به کامپیوتر</string>
+    <string name="pair_subtitle">روی کامپیوتر، DeskPresence ← تنظیمات ← موبایل ← «ساخت کد» را بزنید.</string>
+    <string name="pair_found">کامپیوترهای این شبکه</string>
+    <string name="pair_searching">در حال جستجو در شبکه وای‌فای…</string>
+    <string name="pair_address">یا آدرس کامپیوتر را وارد کنید</string>
+    <string name="pair_address_hint">192.168.1.10</string>
+    <string name="pair_code">کد ۶ رقمی</string>
+    <string name="pair_name">نام این گوشی</string>
+    <string name="pair_button">اتصال</string>
+    <string name="pair_working">در حال اتصال…</string>
+    <string name="pair_choose">یک کامپیوتر را انتخاب کنید یا آدرسش را وارد کنید</string>
+    <string name="err_bad_code">کد اشتباه است یا منقضی شده. روی کامپیوتر کد جدید بسازید.</string>
+    <string name="err_unreachable">کامپیوتر در دسترس نیست. آیا در همان وای‌فای است و «اتصال موبایل فعال» روشن است؟</string>
+    <string name="err_certificate">این کامپیوترِ متصل‌شده شما نیست (گواهی آن عوض شده).</string>
+
+    <!-- home -->
+    <string name="state_working">در حال کار</string>
+    <string name="state_away">اینجا نیست</string>
+    <string name="state_break">در حال استراحت</string>
+    <string name="state_unknown">نامشخص</string>
+    <string name="for_duration">از %1$s پیش</string>
+    <string name="minutes">%1$d دقیقه</string>
+    <string name="hours_minutes">%1$d ساعت و %2$d دقیقه</string>
+    <string name="water_today">لیوان آب امروز</string>
+    <string name="work_today">کار امروز</string>
+    <string name="watch">دیدن وبکم</string>
+    <string name="watch_off">کامپیوتر اجازه دیدن وبکم را نداده</string>
+    <string name="watch_busy">وبکم الان دست برنامه دیگری است</string>
+    <string name="message">ارسال پیام</string>
+    <string name="message_hint">پیام شما روی صفحه کامپیوتر نشان داده می‌شود</string>
+    <string name="send">ارسال</string>
+    <string name="cancel">انصراف</string>
+    <string name="sent">پیام ارسال شد ✓</string>
+    <string name="updated">به‌روز شده %1$s</string>
+    <string name="offline">%1$s در دسترس نیست. دوباره تلاش می‌کنم…</string>
+    <string name="unpaired">این گوشی روی کامپیوتر حذف شده است.</string>
+    <string name="pair_again">اتصال دوباره</string>
+    <string name="menu_rename">تغییر نام این گوشی</string>
+    <string name="menu_unpair">قطع اتصال</string>
+    <string name="unpair_confirm">اتصال به %1$s قطع شود؟ برای اتصال دوباره کد جدید لازم است.</string>
+    <string name="rename_saved">نام ذخیره شد ✓</string>
+
+    <!-- camera -->
+    <string name="live">زنده</string>
+    <string name="connecting">در حال اتصال به وبکم…</string>
+    <string name="camera_notice">روی صفحه %1$s نوشته می‌شود که شما در حال تماشا هستید.</string>
+    <string name="close">بستن</string>
+</resources>

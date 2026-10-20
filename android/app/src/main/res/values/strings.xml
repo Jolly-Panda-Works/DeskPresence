@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">DeskPresence</string>
+
+    <!-- pairing -->
+    <string name="pair_title">Connect to your PC</string>
+    <string name="pair_subtitle">On the PC open DeskPresence → Settings → Mobile app → Create a code.</string>
+    <string name="pair_found">PCs on this network</string>
+    <string name="pair_searching">Searching the Wi-Fi network…</string>
+    <string name="pair_address">Or type the PC\'s address</string>
+    <string name="pair_address_hint">192.168.1.10</string>
+    <string name="pair_code">6-digit code</string>
+    <string name="pair_name">Name of this phone</string>
+    <string name="pair_button">Connect</string>
+    <string name="pair_working">Connecting…</string>
+    <string name="pair_choose">Choose a PC or type its address</string>
+    <string name="err_bad_code">Wrong or expired code. Create a new one on the PC.</string>
+    <string name="err_unreachable">Can\'t reach the PC. Is it on the same Wi-Fi, with “Phones can connect” turned on?</string>
+    <string name="err_certificate">This is not your paired PC (its certificate changed).</string>
+
+    <!-- home -->
+    <string name="state_working">Working</string>
+    <string name="state_away">Not here</string>
+    <string name="state_break">On a break</string>
+    <string name="state_unknown">Unknown</string>
+    <string name="for_duration">for %1$s</string>
+    <string name="minutes">%1$d min</string>
+    <string name="hours_minutes">%1$d h %2$d min</string>
+    <string name="water_today">Glasses of water today</string>
+    <string name="work_today">Worked today</string>
+    <string name="watch">Watch the webcam</string>
+    <string name="watch_off">The PC does not allow watching the webcam</string>
+    <string name="watch_busy">The webcam is used by another app right now</string>
+    <string name="message">Send a message</string>
+    <string name="message_hint">Your message appears on the PC\'s screen</string>
+    <string name="send">Send</string>
+    <string name="cancel">Cancel</string>
+    <string name="sent">Message sent ✓</string>
+    <string name="updated">Updated %1$s</string>
+    <string name="offline">Can\'t reach %1$s. Retrying…</string>
+    <string name="unpaired">This phone was removed on the PC.</string>
+    <string name="pair_again">Connect again</string>
+    <string name="menu_rename">Rename this phone</string>
+    <string name="menu_unpair">Disconnect</string>
+    <string name="unpair_confirm">Disconnect from %1$s? You will need a new code to connect again.</string>
+    <string name="rename_saved">Name saved ✓</string>
+
+    <!-- camera -->
+    <string name="live">LIVE</string>
+    <string name="connecting">Connecting to the webcam…</string>
+    <string name="camera_notice">%1$s sees a message that you are watching.</string>
+    <string name="close">Close</string>
+</resources>
