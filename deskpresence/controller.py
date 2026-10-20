@@ -165,7 +165,8 @@ class Controller:
         self._sync_calls()
         if new["mobile"] != old.get("mobile") and (
                 new["mobile"]["enabled"] != old.get("mobile", {}).get("enabled")
-                or new["mobile"]["port"] != old.get("mobile", {}).get("port")):
+                or new["mobile"]["port"] != old.get("mobile", {}).get("port")
+                or new["mobile"]["relay_url"] != old.get("mobile", {}).get("relay_url")):
             self._sync_companion(restart=True)
         if new["mouse_mode"] != MOUSE_EYES:
             self._eye_close_wanted = True  # closed by the camera thread, which may be using it

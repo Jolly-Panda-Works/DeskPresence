@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="fa" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>DeskPresence</title>
+<style>
+  :root { --bg:#110D0A; --panel:#1F1813; --border:#3A2E24; --fg:#F5EEE8; --muted:#A99B8E; --orange:#F97316; --on:#1A0E05; }
+  * { box-sizing: border-box; }
+  body { margin:0; min-height:100vh; display:flex; align-items:center; justify-content:center; background:var(--bg);
+         color:var(--fg); font-family: "Segoe UI", Tahoma, system-ui, sans-serif; padding:16px; }
+  .card { width:100%; max-width:420px; background:var(--panel); border:1px solid var(--border); border-radius:20px;
+          padding:28px 24px; text-align:center; }
+  .logo { width:64px; height:64px; border-radius:16px; background:linear-gradient(#FB923C,#EA580C); margin:0 auto 14px;
+          display:flex; align-items:center; justify-content:center; font-size:30px; }
+  h1 { font-size:22px; margin:0 0 6px; }
+  p { color:var(--muted); line-height:1.7; margin:6px 0; }
+  .btn { display:block; margin:18px 0 0; padding:14px; border-radius:14px; background:var(--orange); color:var(--on);
+         font-weight:700; text-decoration:none; font-size:16px; }
+  .ghost { background:transparent; color:var(--fg); border:1px solid var(--border); margin-top:10px; font-weight:400; }
+  .code { font-size:34px; font-weight:800; letter-spacing:6px; color:var(--orange); margin:14px 0 2px; direction:ltr; }
+  .en { direction:ltr; font-size:13px; color:var(--muted); margin-top:18px; }
+</style>
+</head>
+<body>
+<div class="card">
+  <div class="logo">👁</div>
+  <h1 id="title"></h1>
+  <p id="body"></p>
+  <div class="code" id="code"></div>
+  <a class="btn" id="open" href="#">باز کردن در برنامه DeskPresence</a>
+  <a class="btn ghost" href="{{APK_URL}}">دانلود برنامه اندروید</a>
+  <p class="en" id="en"></p>
+</div>
+<script>
+  // Everything secret is in the part after "#", which browsers never send to the server.
+  const kind = "{{KIND}}";  // "pc" = pair with a PC, "phone" = connect two phones
+  const params = new URLSearchParams(location.hash.slice(1));
+  params.set("r", location.host);
+  const host = kind === "pc" ? "pair" : "invite";
+  const query = params.toString();
+  const apk = "{{APK_URL}}";
+  document.getElementById("open").href =
+    "intent://" + host + "?" + query + "#Intent;scheme=deskpresence;package=com.jollypanda.deskpresence;" +
+    "S.browser_fallback_url=" + encodeURIComponent(apk) + ";end";
+  document.getElementById("code").textContent = params.get("c") || "";
+  if (kind === "pc") {
+    document.getElementById("title").textContent = "اتصال گوشی به کامپیوتر";
+    document.getElementById("body").textContent = "این لینک گوشی شما را به DeskPresence روی کامپیوتر وصل می‌کند. فقط ۱۰ دقیقه اعتبار دارد.";
+    document.getElementById("en").textContent = "Connect this phone to a PC running DeskPresence. The link works for 10 minutes.";
+  } else {
+    document.getElementById("title").textContent = "اتصال دو گوشی";
+    document.getElementById("body").textContent = "با این لینک وضعیت شما و صاحب لینک برای هم نمایش داده می‌شود. فقط ۱۰ دقیقه اعتبار دارد.";
+    document.getElementById("en").textContent = "Share your status with the person who sent this link. It works for 10 minutes.";
+  }
+</script>
+</body>
+</html>

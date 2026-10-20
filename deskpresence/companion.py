@@ -29,7 +29,7 @@ import threading
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-from . import APP_VERSION
+from . import APP_VERSION, e2e
 from .config import APP_DIR
 
 log = logging.getLogger(__name__)
@@ -126,6 +126,10 @@ class Companion:
         self._code_tries = 0
         self._lock = threading.Lock()
         self.viewers = {}  # stream id -> device name
+        self.identity = e2e.identity()
+        self.relay = None
+        self._keys = {}
+        self.replay = e2e.ReplayGuard()
 
     # --- devices (stored in cfg["mobile"]["devices"]: id -> {name, token_sha256, ...})
     def devices(self):
@@ -171,7 +175,7 @@ class Companion:
                 return self._code, int(left)
             return None, 0
 
-    def pair(self, code, name):
+    def pair(self, code, name, pub=None):
         with self._lock:
             valid = self._code and time.monotonic() < self._code_until
             if not valid:
@@ -187,10 +191,80 @@ class Companion:
         devices = self.devices()
         devices[device_id] = {"name": (name or "Phone").strip()[:40], "token_sha256": _hash(token),
                               "created": int(time.time()), "last_seen": int(time.time()), "camera": True}
+        if pub:
+            try:
+                e2e.load_public(pub)
+                devices[device_id]["pub"] = pub
+            except Exception:
+                log.warning("Phone sent an invalid public key; remote access disabled for it")
         self._save_devices(devices)
         log.info("Paired a new phone: %s", devices[device_id]["name"])
         self.ctrl.on_phone_paired(devices[device_id]["name"])
         return device_id, token
+
+    def pair_reply(self, device_id, token):
+        """What a phone gets after pairing (locally or through the relay)."""
+        from .network import local_addresses
+        return {"device_id": device_id, "token": token, "name": socket.gethostname(),
+                "fingerprint": self.fingerprint, "pc_pub": e2e.public_b64(self.identity),
+                "lan": [f"{a}:{self.port}" for a in local_addresses()[:3]],
+                "hub": self.cfg["mobile"].get("hub_id", ""), "relay": self.cfg["mobile"].get("relay_url", "")}
+
+    def device_key(self, device_id):
+        """The end-to-end key shared with one phone (None for phones paired without a key)."""
+        device = self.cfg["mobile"]["devices"].get(device_id)
+        if not device or not device.get("pub"):
+            return None
+        cached = self._keys.get(device_id)
+        if cached and cached[0] == device["pub"]:
+            return cached[1]
+        key = e2e.derive(self.identity, device["pub"], device_id)
+        self._keys[device_id] = (device["pub"], key)
+        return key
+
+    def dispatch(self, device_id, device, method, path, body):
+        """The phone API, shared by the local HTTPS server and the relay. Returns (status, json)."""
+        if method == "GET" and path == "/api/status":
+            status = self.status()
+            status["device_name"] = device["name"]
+            status["camera_allowed"] = status["camera_allowed"] and device.get("camera", True)
+            return 200, status
+        if method == "POST" and path == "/api/message":
+            text = str(body.get("text", "")).strip()[:MAX_MESSAGE]
+            if not text:
+                return 400, {"error": "empty"}
+            self.ctrl.on_phone_message(device["name"], text)
+            return 200, {"ok": True}
+        if method == "POST" and path == "/api/rename":
+            self.rename(device_id, str(body.get("name", "")))
+            return 200, {"ok": True}
+        return 404, {"error": "not found"}
+
+    def camera_denied(self, device):
+        """None when this phone may watch the webcam now, else (status, error)."""
+        if not (self.cfg["mobile"]["allow_camera"] and device.get("camera", True)):
+            return 403, "camera_not_allowed"
+        if self.ctrl.camera_lent_to is not None:
+            return 409, "camera_busy"
+        return None
+
+    def frames(self, keep_going):
+        """JPEG frames for a viewer at STREAM_FPS while keep_going() is true."""
+        import cv2
+        waited, last = 0.0, None
+        while self.running and keep_going():
+            frame = self.ctrl.camera_frame()
+            if frame is None or frame is last:
+                time.sleep(0.05)
+                waited += 0.05
+                if waited > 15:  # the webcam did not come up
+                    return
+                continue
+            waited, last = 0.0, frame
+            ok, jpg = cv2.imencode(".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, 70])
+            if ok:
+                yield jpg.tobytes()
+                time.sleep(1.0 / STREAM_FPS)
 
     # --- lifecycle
     def start(self):
@@ -212,9 +286,17 @@ class Companion:
         self.running = True
         log.info("Companion server on port %s", self.port)
         self._advertise()
+        mobile = self.cfg["mobile"]
+        if mobile.get("relay_url"):
+            from .relay_client import RelayClient
+            self.relay = RelayClient(self, mobile["relay_url"], mobile["hub_id"], mobile["hub_secret"])
+            self.relay.start()
 
     def stop(self):
         self.running = False
+        if self.relay:
+            self.relay.stop()
+            self.relay = None
         if self._zeroconf:
             try:
                 self._zeroconf.unregister_service(self._zc_info)
@@ -329,52 +411,32 @@ class _Handler(BaseHTTPRequestHandler):
         c = self.companion
         if self.path == "/api/info":
             return self._json(200, {"name": socket.gethostname(), "version": APP_VERSION,
-                                    "fingerprint": c.fingerprint})
+                                    "fingerprint": c.fingerprint, "pc_pub": e2e.public_b64(c.identity)})
         device_id, device = self._auth()
         if device is None:
             return
-        if self.path == "/api/status":
-            status = c.status()
-            status["device_name"] = device["name"]
-            status["camera_allowed"] = status["camera_allowed"] and device.get("camera", True)
-            return self._json(200, status)
         if self.path.startswith("/api/camera"):
             return self._camera(device)
-        self._json(404, {"error": "not found"})
+        self._json(*c.dispatch(device_id, device, "GET", self.path, {}))
 
     def do_POST(self):
         c = self.companion
         if self.path == "/api/pair":
             body = self._body()
-            result = c.pair(body.get("code", ""), body.get("name", ""))
+            result = c.pair(body.get("code", ""), body.get("name", ""), body.get("pub"))
             if result is None:
                 return self._json(403, {"error": "bad_code"})
-            device_id, token = result
-            return self._json(200, {"device_id": device_id, "token": token, "name": socket.gethostname(),
-                                    "fingerprint": c.fingerprint})
+            return self._json(200, c.pair_reply(*result))
         device_id, device = self._auth()
         if device is None:
             return
-        body = self._body()
-        if self.path == "/api/message":
-            text = str(body.get("text", "")).strip()[:MAX_MESSAGE]
-            if not text:
-                return self._json(400, {"error": "empty"})
-            c.ctrl.on_phone_message(device["name"], text)
-            return self._json(200, {"ok": True})
-        if self.path == "/api/rename":
-            c.rename(device_id, str(body.get("name", "")))
-            return self._json(200, {"ok": True})
-        self._json(404, {"error": "not found"})
+        self._json(*c.dispatch(device_id, device, "POST", self.path, self._body()))
 
     def _camera(self, device):
         c = self.companion
-        ctrl = c.ctrl
-        if not (ctrl.cfg["mobile"]["allow_camera"] and device.get("camera", True)):
-            return self._json(403, {"error": "camera_not_allowed"})
-        if ctrl.camera_lent_to is not None:
-            return self._json(409, {"error": "camera_busy"})
-        import cv2
+        denied = c.camera_denied(device)
+        if denied:
+            return self._json(denied[0], {"error": denied[1]})
         sid = c.add_viewer(device["name"])
         log.info("%s started watching the webcam", device["name"])
         try:
@@ -383,26 +445,10 @@ class _Handler(BaseHTTPRequestHandler):
             self.send_header("Cache-Control", "no-store")
             self.send_header("Connection", "close")
             self.end_headers()
-            waited = 0.0
-            last = None
-            while c.running:
-                frame = ctrl.camera_frame()
-                if frame is None or frame is last:
-                    time.sleep(0.05)
-                    waited += 0.05
-                    if waited > 15:  # the webcam did not come up
-                        break
-                    continue
-                waited = 0.0
-                last = frame
-                ok, jpg = cv2.imencode(".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, 70])
-                if not ok:
-                    continue
-                data = jpg.tobytes()
+            for data in c.frames(lambda: True):
                 self.wfile.write(b"--frame\r\nContent-Type: image/jpeg\r\nContent-Length: "
                                  + str(len(data)).encode() + b"\r\n\r\n" + data + b"\r\n")
                 self.wfile.flush()
-                time.sleep(1.0 / STREAM_FPS)
         except (ConnectionError, ssl.SSLError, OSError):
             pass  # the phone closed the stream
         except Exception:

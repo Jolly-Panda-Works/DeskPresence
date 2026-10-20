@@ -1,0 +1,9 @@
+{$DOMAIN} {
+	reverse_proxy relay:8080 {
+		# webcam streams are long-running responses
+		flush_interval -1
+		transport http {
+			read_timeout 0
+		}
+	}
+}

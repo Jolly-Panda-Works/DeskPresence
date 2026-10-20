@@ -94,7 +94,12 @@ DEFAULTS = {
         "enabled": False,
         "port": 47830,
         "allow_camera": True,       # phones may watch the webcam (each phone can be switched off too)
-        "devices": {},              # paired phones: id -> {name, token_sha256, created, last_seen, camera}
+        "devices": {},              # paired phones: id -> {name, token_sha256, pub, created, last_seen, camera}
+        # relay on your own server, for phones outside the home network (see relay/), e.g.
+        # "https://deskpresence.example.com"; empty = local network only
+        "relay_url": "",
+        "hub_id": "",               # this PC's id / secret on the relay (created automatically)
+        "hub_secret": "",
     },
 
     # --- network link between desktop and laptop ---
@@ -146,6 +151,11 @@ class Config:
             self.data = _merge(DEFAULTS, _migrate(user))
             if not self.data["token"]:
                 self.data["token"] = secrets.token_urlsafe(16)
+            mobile = self.data["mobile"]
+            if not mobile.get("hub_id"):
+                mobile["hub_id"] = secrets.token_hex(8)
+            if not mobile.get("hub_secret"):
+                mobile["hub_secret"] = secrets.token_urlsafe(32)
         self.save()
 
     def save(self):
