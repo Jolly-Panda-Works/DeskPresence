@@ -78,7 +78,6 @@ class UI:
         self.root.report_callback_exception = lambda *exc: log.error("UI error", exc_info=exc)
         self._q = queue.Queue()
         self._popups = []
-        self._banner = None
         self._break_wins = []
         self._break_time_labels = []
         self._break_status_labels = []
@@ -147,8 +146,7 @@ class UI:
 
         l, t_, r, b = monitor.work
         self._popups = [p for p in self._popups if p.winfo_exists()]
-        banner = self._banner.winfo_height() + 8 if self._banner is not None and self._banner.winfo_exists() else 0
-        y = b - 12 - h - banner - sum(p.winfo_height() + 8 for p in self._popups)
+        y = b - 12 - h - sum(p.winfo_height() + 8 for p in self._popups)
         y = max(t_ + 12, y)
         win.geometry(f"{w}x{h}+{r - w - 12}+{y}")
         self._popups.append(win)
@@ -163,39 +161,6 @@ class UI:
                 bind_all(c)
         bind_all(win)
         win.after(int(seconds * 1000), close)
-
-    # ------------------------------------------------------------ "watching you" banner
-    def viewer_banner(self, text, monitor):
-        """A permanent banner under the popups while a phone watches the webcam (text=None hides it)."""
-        self.call(self._viewer_banner, text, monitor)
-
-    def _viewer_banner(self, text, monitor):
-        if self._banner is not None and self._banner.winfo_exists():
-            self._banner.destroy()
-        self._banner = None
-        if not text:
-            return
-        anchor, justify = _align()
-        w = 380
-        win = tk.Toplevel(self.root, bg=DANGER)
-        win.overrideredirect(True)
-        win.attributes("-topmost", True)
-        frame = tk.Frame(win, bg=PANEL)
-        frame.pack(fill="both", expand=True, padx=2, pady=2)
-        tk.Label(frame, text=text, bg=PANEL, fg=FG, font=(FONT, 10, "bold"), anchor=anchor, justify=justify,
-                 wraplength=w - 28).pack(fill="x", padx=12, pady=10)
-        win.update_idletasks()
-        h = win.winfo_reqheight()
-        l, t_, r, b = monitor.work
-        win.geometry(f"{w}x{h}+{r - w - 12}+{b - h - 12}")
-        self._banner = win
-
-        def keep_on_top():
-            if self._banner is win and win.winfo_exists():
-                win.attributes("-topmost", True)
-                win.lift()
-                win.after(2000, keep_on_top)
-        keep_on_top()
 
     # ------------------------------------------------------------ question box
     def ask(self, title, body, yes_text, no_text, callback, monitor, timeout=45):

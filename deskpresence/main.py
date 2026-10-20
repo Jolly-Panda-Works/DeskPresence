@@ -56,12 +56,6 @@ def self_test():
                        phone, settings_ui, tray, widget)
         calls.phone_link_audio_active()
         import pycaw.pycaw  # noqa: F401
-        import cryptography.x509  # noqa: F401
-        import zeroconf  # noqa: F401
-        import aiohttp  # noqa: F401
-        import qrcode  # noqa: F401
-        from . import e2e, relay_client  # noqa: F401
-        from . import companion, stats  # noqa: F401
         from .vision import _model_path
         assert _model_path(), "YuNet model missing"
         assert eyetrack.available(), "eye-tracking model or mediapipe missing"

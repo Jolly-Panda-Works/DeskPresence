@@ -10,7 +10,6 @@ from .i18n import t
 from .media import MediaController
 from .network import Link
 from .calls import CallWatcher
-from .stats import Stats
 from .camshare import CameraShare, Lend
 from .notifications import NotificationWatcher
 from .phone import PhoneWatcher
@@ -55,12 +54,6 @@ class Controller:
         self._hotkey_down = False
         self._eye_close_wanted = False
         self._calls = None
-        # Android companion app
-        self.stats = Stats()
-        self.companion = None
-        self.viewers = []                      # names of phones watching the webcam right now
-        self.state_since = time.monotonic()
-        self._stats_saved_at = time.monotonic()
         self._last_wall = time.time()
         # phone over Bluetooth
         self._phone = None
@@ -112,7 +105,6 @@ class Controller:
     def start(self):
         self._start_network()
         self._sync_calls()
-        self._sync_companion()
         threading.Thread(target=self._run, daemon=True, name="controller").start()
 
     def _start_network(self):
@@ -137,9 +129,6 @@ class Controller:
         self._stop.set()
         if self._calls:
             self._calls.stop()
-        if self.companion:
-            self.companion.stop()
-        self.stats.save()
         if self.state == AWAY:
             self.come_back(local=True)
         self._stop_network()
@@ -163,11 +152,6 @@ class Controller:
             self._stop_network()
             self._start_network()
         self._sync_calls()
-        if new["mobile"] != old.get("mobile") and (
-                new["mobile"]["enabled"] != old.get("mobile", {}).get("enabled")
-                or new["mobile"]["port"] != old.get("mobile", {}).get("port")
-                or new["mobile"]["relay_url"] != old.get("mobile", {}).get("relay_url")):
-            self._sync_companion(restart=True)
         if new["mouse_mode"] != MOUSE_EYES:
             self._eye_close_wanted = True  # closed by the camera thread, which may be using it
         self._set_status(self.state if self.uses_camera else "laptop_wait")
@@ -191,8 +175,7 @@ class Controller:
     @property
     def camera_wanted(self):
         return (self.uses_camera and not self.paused and self.camera_lent_to is None
-                and (self.cfg["presence_source"] in ("camera", "both") or self.cfg["mouse_mode"] != MOUSE_OFF
-                     or bool(self.viewers)))
+                and (self.cfg["presence_source"] in ("camera", "both") or self.cfg["mouse_mode"] != MOUSE_OFF))
 
     @property
     def phone_wanted(self):
@@ -258,8 +241,8 @@ class Controller:
                 log.exception("process failed")
             if self.sensor is not None:
                 fps = self.cfg["camera_fps"]
-                if self.cfg["mouse_mode"] == MOUSE_EYES or self.viewers:
-                    fps = max(fps, 15)  # eye control and phone viewers need a smoother stream
+                if self.cfg["mouse_mode"] == MOUSE_EYES:
+                    fps = max(fps, 15)  # eye control needs a smoother stream
                 period = 1.0 / max(1, fps)
             else:
                 period = 0.5
@@ -298,35 +281,6 @@ class Controller:
     @property
     def phone_near(self):
         return self._phone.near if self._phone else None
-
-    # ------------------------------------------------------------ Android companion app
-    def _sync_companion(self, restart=False):
-        from .companion import Companion
-        mobile = self.cfg["mobile"]
-        if self.companion and (restart or not mobile["enabled"]):
-            self.companion.stop()
-            self.companion = None
-        if mobile["enabled"] and self.companion is None:
-            self.companion = Companion(self, self.cfg, mobile["port"])
-            threading.Thread(target=self.companion.start, daemon=True, name="companion-start").start()
-
-    def camera_frame(self):
-        """The latest webcam frame for phone viewers (None while the webcam is off)."""
-        sensor = self.sensor
-        return sensor.last_frame if sensor is not None else None
-
-    def on_viewers_changed(self, names):
-        self.viewers = names
-        mon = winapi.pick_monitor(winapi.list_monitors(), self.cfg["notification_monitor"])
-        self.ui.viewer_banner(t("viewer.banner", names=", ".join(dict.fromkeys(names))) if names else None, mon)
-
-    def on_phone_message(self, name, text):
-        log.info("Message from %s", name)
-        winapi.beep()
-        self.popup(text, "", source=f"📱 {name}", seconds=20)
-
-    def on_phone_paired(self, name):
-        self.popup(t("mobile.paired.title"), t("mobile.paired.body", name=name), seconds=8)
 
     # ------------------------------------------------------------ phone calls
     def _sync_calls(self):
@@ -504,7 +458,7 @@ class Controller:
                 return
             log.info("AWAY (local=%s)", local)
             self.state = AWAY
-            self._away_since = self.state_since = time.monotonic()
+            self._away_since = time.monotonic()
             self._phone_at_away = self.phone_near
             self._locked = False
             if self.cfg["pause_media"]:
@@ -523,7 +477,6 @@ class Controller:
             log.info("BACK (local=%s)", local)
             self.state = PRESENT
             now = time.monotonic()
-            self.state_since = now
             self._last_face = now
             # a long absence counts as a break: the break and stand-up timers start over.
             # Shorter absences only pause them (they did not count while you were away).
@@ -568,10 +521,6 @@ class Controller:
         self.water_elapsed += dt
         self.work_elapsed += dt
         self.sit_elapsed += dt
-        self.stats.add_work(dt)
-        if now - self._stats_saved_at >= 60:
-            self._stats_saved_at = now
-            self.stats.save()
 
     def _water_step(self, now):
         mins = self.cfg["water_reminder_minutes"]
@@ -588,14 +537,11 @@ class Controller:
             self.water_elapsed = max(0.0, self.cfg["water_reminder_minutes"] * 60 - 10 * 60)
         else:  # drank, or no answer: the next reminder comes after the usual interval
             self.water_elapsed = 0.0
-            if answer is True:
-                self.stats.add_water()
         self._set_status(self.status)
 
     def drank_water(self):
         """The "I drank water" button: restart the water timer."""
         self.water_elapsed = 0.0
-        self.stats.add_water()
         log.info("Water timer restarted")
         self._set_status(self.status)
 
@@ -630,7 +576,6 @@ class Controller:
             fb = self.cfg["forced_break"]
             log.info("Forced break started")
             self.break_active = True
-            self.state_since = time.monotonic()
             self._break_left = fb["break_minutes"] * 60.0
             self._pending_target = None
             self.ui.break_show(winapi.list_monitors(), fb["allow_skip"],
@@ -645,7 +590,6 @@ class Controller:
                 return
             log.info("Forced break ended (skipped=%s)", skipped)
             self.break_active = False
-            self.state_since = time.monotonic()
             self.work_elapsed = self.sit_elapsed = 0.0
             self._break_reminded = False
             self.ui.break_hide()

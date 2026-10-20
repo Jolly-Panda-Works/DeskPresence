@@ -89,19 +89,6 @@ DEFAULTS = {
     "forward_notifications": True,    # laptop role: send laptop toasts to the desktop
     "dismiss_forwarded": False,       # laptop role: remove toast from laptop after forwarding
 
-    # --- Android companion app (server on this PC) ---
-    "mobile": {
-        "enabled": False,
-        "port": 47830,
-        "allow_camera": True,       # phones may watch the webcam (each phone can be switched off too)
-        "devices": {},              # paired phones: id -> {name, token_sha256, pub, created, last_seen, camera}
-        # relay on your own server, for phones outside the home network (see relay/), e.g.
-        # "https://deskpresence.example.com"; empty = local network only
-        "relay_url": "",
-        "hub_id": "",               # this PC's id / secret on the relay (created automatically)
-        "hub_secret": "",
-    },
-
     # --- network link between desktop and laptop ---
     "network_enabled": False,
     "port": 47821,
@@ -111,7 +98,7 @@ DEFAULTS = {
 
 
 # dicts that are stored as a whole instead of merged key by key with the defaults
-WHOLE_DICTS = ("calibration", "eye_calibration", "media_apps", "devices")
+WHOLE_DICTS = ("calibration", "eye_calibration", "media_apps")
 
 
 def _migrate(user):
@@ -151,11 +138,6 @@ class Config:
             self.data = _merge(DEFAULTS, _migrate(user))
             if not self.data["token"]:
                 self.data["token"] = secrets.token_urlsafe(16)
-            mobile = self.data["mobile"]
-            if not mobile.get("hub_id"):
-                mobile["hub_id"] = secrets.token_hex(8)
-            if not mobile.get("hub_secret"):
-                mobile["hub_secret"] = secrets.token_urlsafe(32)
         self.save()
 
     def save(self):

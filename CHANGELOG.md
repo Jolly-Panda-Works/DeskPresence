@@ -3,23 +3,13 @@
 Release builds are published automatically from `main`. See the
 [Releases page](https://github.com/Jolly-Panda-Works/DeskPresence/releases) for every build's notes.
 
-## 1.6
-
-- Access from outside the home network through your own relay server (relay/: Docker + Caddy, one-command install); works on mobile data and behind CGNAT.
-- End-to-end encryption between phone and PC (P-256 ECDH + AES-256-GCM); the relay only forwards sealed data, including the webcam picture.
-- Pair a phone by QR code, link or code; the link opens the app.
-- Phones share their status with each other (available / busy / driving / meeting / sleeping or custom text, battery, on a call, last active), every 15 minutes even with the app closed.
-- The phone app picks Wi-Fi when the PC is reachable there and the relay otherwise.
-
 ## 1.5
 
-- Android app: working / not here / on a break, glasses of water and hours worked today, live webcam view and messages to the PC.
-- Pair any number of phones with a 6-digit code; rename them, allow or deny the webcam per phone, remove them.
-- While a phone watches the webcam, a banner on the monitor says who is watching.
-- The PC is the server (encrypted HTTPS, pinned certificate, found automatically on the Wi-Fi network).
+- Fixed: the app crashed now and then. The list of music and video apps was read from Windows' media controls on several threads; all media access now runs on one thread, and the tray menu reads a cached list.
 - Every unhandled error is written to log.txt, native crashes to crash.txt.
 - After sleep or hibernation every timer (water, break, stand-up) starts over; after a restart they already do.
 - Widget: title bar with minimize (one-line bar) and close buttons, adjustable transparency (right-click, Ctrl + mouse wheel or Settings; fully opaque under the mouse), drag from anywhere.
+- The Android app and the relay server moved to the `mobile-app` branch for now.
 
 ## 1.4
 

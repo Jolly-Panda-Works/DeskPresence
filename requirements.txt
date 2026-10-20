@@ -16,7 +16,3 @@ winrt-Windows.ApplicationModel>=2.0
 winrt-Windows.Devices.Bluetooth>=2.0
 winrt-Windows.Devices.Bluetooth.Rfcomm>=2.0
 winrt-Windows.Devices.Enumeration>=2.0
-cryptography>=42
-zeroconf>=0.132
-aiohttp>=3.9
-qrcode>=7.4
