@@ -22,9 +22,9 @@ jobs:
   build:
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
           cache: pip
@@ -106,7 +106,7 @@ jobs:
 
       # Every build (any branch, pull requests, main, tags) keeps its output for two weeks:
       # Actions -> the run -> Artifacts.
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: DeskPresence-${{ steps.ver.outputs.version }}
           path: |
@@ -131,7 +131,7 @@ jobs:
 
       - name: Publish GitHub Release
         if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master' || startsWith(github.ref, 'refs/tags/v'))
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           tag_name: v${{ steps.ver.outputs.version }}
           name: DeskPresence v${{ steps.ver.outputs.version }}
