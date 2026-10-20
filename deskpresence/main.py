@@ -14,6 +14,34 @@ def _setup_logging():
         handlers.append(logging.StreamHandler())
     logging.basicConfig(level=logging.INFO, handlers=handlers,
                         format="%(asctime)s %(levelname)s %(name)s: %(message)s")
+    _catch_crashes()
+
+
+_crash_file = None
+
+
+def _catch_crashes():
+    """Every unhandled error ends up in log.txt; hard crashes of native code in crash.txt."""
+    global _crash_file
+    import faulthandler
+    import os
+    import threading
+    log = logging.getLogger("crash")
+
+    def on_exception(exc_type, exc, tb):
+        log.critical("Unhandled error", exc_info=(exc_type, exc, tb))
+
+    def on_thread_exception(args):
+        log.critical("Unhandled error in thread %s", args.thread.name if args.thread else "?",
+                     exc_info=(args.exc_type, args.exc_value, args.exc_traceback))
+
+    sys.excepthook = on_exception
+    threading.excepthook = on_thread_exception
+    try:
+        _crash_file = open(os.path.join(os.path.dirname(LOG_PATH), "crash.txt"), "a", encoding="utf-8")
+        faulthandler.enable(file=_crash_file, all_threads=True)
+    except Exception:
+        log.exception("faulthandler unavailable")
 
 
 def self_test():

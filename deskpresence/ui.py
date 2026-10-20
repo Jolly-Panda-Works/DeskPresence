@@ -74,6 +74,8 @@ class UI:
     def __init__(self):
         self.root = tk.Tk()
         self.root.withdraw()
+        # errors in button handlers etc. go to log.txt (a windowed exe has no console to print to)
+        self.root.report_callback_exception = lambda *exc: log.error("UI error", exc_info=exc)
         self._q = queue.Queue()
         self._popups = []
         self._break_wins = []
