@@ -10,6 +10,7 @@ Release builds are published automatically from `main`. See the
 - While a phone watches the webcam, a banner on the monitor says who is watching.
 - The PC is the server (encrypted HTTPS, pinned certificate, found automatically on the Wi-Fi network).
 - Every unhandled error is written to log.txt, native crashes to crash.txt.
+- After sleep or hibernation every timer (water, break, stand-up) starts over; after a restart they already do.
 
 ## 1.4
 

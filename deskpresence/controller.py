@@ -21,6 +21,7 @@ log = logging.getLogger(__name__)
 PRESENT, AWAY = "present", "away"
 LAPTOP = "laptop"
 MOUSE_OFF, MOUSE_MONITOR, MOUSE_EYES = "off", "monitor", "eyes"
+SLEEP_GAP_SECONDS = 120
 NETWORK_KEYS = ("network_enabled", "role", "port", "desktop_host", "token",
                 "forward_notifications", "dismiss_forwarded")
 
@@ -60,6 +61,7 @@ class Controller:
         self.viewers = []                      # names of phones watching the webcam right now
         self.state_since = time.monotonic()
         self._stats_saved_at = time.monotonic()
+        self._last_wall = time.time()
         # phone over Bluetooth
         self._phone = None
         self._phone_at_away = None
@@ -213,6 +215,7 @@ class Controller:
                 self._stop.wait(0.5)
                 continue
             t0 = time.monotonic()
+            self._check_resume(time.time())
             if self._eye_close_wanted:
                 self._eye_close_wanted = False
                 if self.cfg["mouse_mode"] != MOUSE_EYES:
@@ -537,6 +540,26 @@ class Controller:
         if self._break_done_notice:
             self._break_done_notice = False
             self.popup(t("break.done.title"), t("break.done.body"))
+
+    # ------------------------------------------------------------ sleep / hibernate
+    def _check_resume(self, wall_now):
+        """The loop runs every half second; a big jump of the wall clock means the PC was asleep."""
+        gap = wall_now - self._last_wall
+        self._last_wall = wall_now
+        if gap >= SLEEP_GAP_SECONDS:
+            self.on_resume(gap)
+
+    def on_resume(self, gap):
+        """Back from sleep or hibernation: every timer starts over."""
+        log.info("Resumed after %d s of sleep: timers restart", gap)
+        if self.break_active:
+            self.end_break(skipped=True)
+        self.water_elapsed = self.work_elapsed = self.sit_elapsed = 0.0
+        self._break_reminded = False
+        self._water_asking = False
+        self._last_face = self._last_tick = time.monotonic()
+        self._reopen = True  # the webcam handle does not survive sleep
+        self._set_status(self.status)
 
     # ------------------------------------------------------------ water + forced break
     def _count_desk_time(self, now):

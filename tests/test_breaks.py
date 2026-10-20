@@ -115,3 +115,18 @@ def test_skip_ends_break(sim):
     sim.ctrl.end_break(skipped=True)
     assert not sim.ctrl.break_active
     assert t("break.done.title") not in popups(sim)
+
+
+def test_sleep_or_hibernate_restarts_every_timer(sim):
+    sim.run(85 * 60, True)
+    sim.ctrl.drank_water()
+    sim.run(30 * 60, True)  # 30 min toward the next water reminder, break already running
+    assert sim.ctrl.break_active
+    wall = sim.ctrl._last_wall
+    sim.ctrl._check_resume(wall + 1)          # a normal half-second tick: nothing happens
+    assert sim.ctrl.break_active
+    sim.ctrl._check_resume(wall + 1 + 3 * 3600)  # woke up after 3 hours of sleep
+    assert not sim.ctrl.break_active
+    assert ("hide",) in sim.ui.log
+    t = sim.ctrl.timers()
+    assert t["water_left"] == 60 * 60 and t["break_left"] == 90 * 60 and t["sitting"] == 0
