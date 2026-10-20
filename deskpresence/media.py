@@ -16,7 +16,7 @@ import asyncio
 import logging
 import threading
 
-from . import winapi
+from . import winapi, winrt_thread
 
 log = logging.getLogger(__name__)
 
@@ -131,18 +131,31 @@ class MediaController:
         self._fallback_paused = False
         self.seen = {}  # app key -> (display name, last detected kind)
         self._lock = threading.Lock()
+        self._refreshing = None
+        self._mgr = None        # the session manager, requested once (WinRT thread only)
+        self._mgr_task = None
 
     def _overrides(self):
         return dict(self.cfg["media_apps"]) if self.cfg is not None else {}
 
+    async def _manager(self):
+        """The media session manager. Requested once; while Windows has not answered yet no
+        second request is started (a stuck request would otherwise pile up new ones)."""
+        if self._mgr is not None:
+            return self._mgr
+        if self._mgr_task is None or self._mgr_task.done():
+            self._mgr_task = asyncio.ensure_future(SessionManager.request_async())
+        self._mgr = await winrt_thread.guarded(self._mgr_task, 5)
+        return self._mgr
+
     async def _sessions(self):
-        mgr = await SessionManager.request_async()
+        mgr = await self._manager()
         out = []
         for s in mgr.get_sessions():
             aumid = s.source_app_user_model_id
             ptype, album = 0, ""
             try:
-                props = await s.try_get_media_properties_async()
+                props = await winrt_thread.guarded(s.try_get_media_properties_async(), 3)
                 ptype = int(props.playback_type or 0)
                 album = props.album_title or ""
             except Exception:
@@ -159,7 +172,7 @@ class MediaController:
             try:
                 if kind == IGNORE or s.get_playback_info().playback_status != PlaybackStatus.PLAYING:
                     continue
-                if await s.try_pause_async():
+                if await winrt_thread.guarded(s.try_pause_async(), 3):
                     log.info("Paused %s (%s)", aumid, kind)
                     if kind == MUSIC:
                         resume.append(aumid)
@@ -171,16 +184,17 @@ class MediaController:
         for s, aumid, _kind in await self._sessions():
             try:
                 if aumid in ids and s.get_playback_info().playback_status != PlaybackStatus.PLAYING:
-                    await s.try_play_async()
+                    await winrt_thread.guarded(s.try_play_async(), 3)
                     log.info("Resumed %s", aumid)
             except Exception:
                 log.exception("Resuming a session failed")
 
     def scan(self):
-        """Refresh the list of media apps Windows knows about (for the tray menu)."""
-        if HAVE_SMTC:
+        """The media apps seen so far (for the tray menu / settings). Never blocks: it returns the
+        cached list and refreshes it in the background on the WinRT thread."""
+        if HAVE_SMTC and (self._refreshing is None or self._refreshing.done()):
             try:
-                asyncio.run(self._sessions())
+                self._refreshing = winrt_thread.submit(self._sessions)
             except Exception:
                 log.debug("Media scan failed", exc_info=True)
         with self._lock:
@@ -190,12 +204,15 @@ class MediaController:
         """Pauses what is playing. Music paused for `reason` is resumed by resume(reason)."""
         if HAVE_SMTC:
             try:
-                ids = asyncio.run(self._pause())
+                ids = winrt_thread.run(self._pause, timeout=20)
                 self._resume[reason] = self._resume.get(reason, []) + ids
                 return
-            except Exception:
-                log.exception("SMTC pause failed")
-        if reason == "away":
+            except Exception as e:
+                # Windows' media controls did not answer: do nothing rather than pressing the
+                # play/pause key blindly (that would START music when nothing was playing)
+                log.warning("Could not pause media: %s", e or type(e).__name__)
+            return
+        if reason == "away":  # no media controls on this Windows: the media key is all we have
             winapi.press_media_play_pause()
             self._fallback_paused = True
 
@@ -203,9 +220,9 @@ class MediaController:
         ids = self._resume.pop(reason, [])
         if HAVE_SMTC and ids:
             try:
-                asyncio.run(self._resume_ids(ids))
-            except Exception:
-                log.exception("SMTC resume failed")
+                winrt_thread.run(lambda: self._resume_ids(ids), timeout=20)
+            except Exception as e:
+                log.warning("Could not resume media: %s", e or type(e).__name__)
         elif reason == "away" and self._fallback_paused:
             winapi.press_media_play_pause()
         if reason == "away":

@@ -41,3 +41,43 @@ def test_display_names():
     assert display_name(ZUNE_MUSIC) == "Media Player"
     assert display_name("Chrome._crx_agimnkijcamfeangaknmldooml") == "YouTube"
     assert display_name("308046B0AF4A39CB") == "Firefox"
+
+
+def test_guarded_gives_up_without_cancelling():
+    """A WinRT operation that never finishes must not hang DeskPresence (and must not be cancelled)."""
+    import asyncio
+    import time
+
+    from deskpresence import winrt_thread
+
+    async def main():
+        never = asyncio.get_running_loop().create_future()
+        t = time.monotonic()
+        try:
+            await winrt_thread.guarded(never, 0.2)
+            raise AssertionError("should have timed out")
+        except TimeoutError:
+            pass
+        assert time.monotonic() - t < 1 and not never.cancelled()
+        assert await winrt_thread.guarded(asyncio.sleep(0, "ok"), 1) == "ok"
+    asyncio.run(main())
+
+
+def test_scan_never_blocks(monkeypatch):
+    """The tray menu reads the cached list; the real scan happens on the WinRT thread."""
+    import time
+
+    from deskpresence import media
+
+    started = []
+    monkeypatch.setattr(media.winrt_thread, "submit", lambda factory: started.append(1) or _Done())
+    m = media.MediaController()
+    m.seen = {"spotify.exe": ("Spotify", "music")}
+    t = time.monotonic()
+    assert m.scan() == {"spotify.exe": ("Spotify", "music")}
+    assert time.monotonic() - t < 0.1 and started == [1]
+
+
+class _Done:
+    def done(self):
+        return True

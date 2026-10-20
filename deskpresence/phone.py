@@ -5,10 +5,11 @@ in range (about 5-10 m) answers within a fraction of a second; when it is gone t
 out after ~5 s with no services. That works without any app on the phone - it only has to be
 paired with this PC and have Bluetooth on.
 """
-import asyncio
 import logging
 import threading
 import time
+
+from . import winrt_thread
 
 log = logging.getLogger(__name__)
 
@@ -29,10 +30,10 @@ PHONE_MAJOR_CLASS = 2  # Bluetooth class of device: Phone
 async def _paired():
     out = []
     selector = BluetoothDevice.get_device_selector_from_pairing_state(True)
-    for d in await DeviceInformation.find_all_async_aqs_filter(selector):
+    for d in await winrt_thread.guarded(DeviceInformation.find_all_async_aqs_filter(selector), 10):
         is_phone = False
         try:
-            dev = await BluetoothDevice.from_id_async(d.id)
+            dev = await winrt_thread.guarded(BluetoothDevice.from_id_async(d.id), 5)
             if dev is not None:
                 is_phone = int(dev.class_of_device.major_class) == PHONE_MAJOR_CLASS
                 dev.close()
@@ -48,20 +49,20 @@ def paired_devices():
     if not HAVE_BT:
         return []
     try:
-        return asyncio.run(_paired())
+        return winrt_thread.run(_paired, timeout=30)
     except Exception:
         log.exception("Listing Bluetooth devices failed")
         return []
 
 
 async def _probe(device_id):
-    dev = await BluetoothDevice.from_id_async(device_id)
+    dev = await winrt_thread.guarded(BluetoothDevice.from_id_async(device_id), 5)
     if dev is None:
         return False
     try:
         if dev.connection_status == BluetoothConnectionStatus.CONNECTED:
             return True
-        res = await dev.get_rfcomm_services_with_cache_mode_async(BluetoothCacheMode.UNCACHED)
+        res = await winrt_thread.guarded(dev.get_rfcomm_services_with_cache_mode_async(BluetoothCacheMode.UNCACHED), 10)
         return len(res.services) > 0
     finally:
         dev.close()
@@ -72,7 +73,7 @@ def probe(device_id):
     if not HAVE_BT or not device_id:
         return False
     try:
-        return asyncio.run(_probe(device_id))
+        return winrt_thread.run(lambda: _probe(device_id), timeout=20)
     except Exception:
         log.debug("Bluetooth probe failed", exc_info=True)
         return False

@@ -14,6 +14,8 @@ import logging
 import threading
 import time
 
+from . import winrt_thread
+
 log = logging.getLogger(__name__)
 
 try:
@@ -61,7 +63,6 @@ class CallWatcher(threading.Thread):
         self.in_call = False
         self._quiet_since = None
         self._stop = threading.Event()
-        self._logged = set()
 
     def stop(self):
         self._stop.set()
@@ -70,7 +71,7 @@ class CallWatcher(threading.Thread):
         if listener is None:
             return False
         ringing = False
-        for n in await listener.get_notifications_async(NotificationKinds.TOAST):
+        for n in await winrt_thread.guarded(listener.get_notifications_async(NotificationKinds.TOAST), 5):
             try:
                 aumid = (n.app_info.app_user_model_id or "").lower()
                 name = (n.app_info.display_info.display_name or "").lower()
@@ -85,9 +86,7 @@ class CallWatcher(threading.Thread):
                     texts = [t.text for t in binding.get_text_elements()]
             except Exception:
                 pass
-            if n.id not in self._logged:  # helps tuning CALL_WORDS for other languages
-                self._logged.add(n.id)
-                log.info("Phone Link notification: %s", " | ".join(texts))
+            # never log the texts: they contain contact names and message previews
             if is_call_text(texts):
                 ringing = True
         return ringing
@@ -97,7 +96,7 @@ class CallWatcher(threading.Thread):
         if HAVE_LISTENER:
             try:
                 listener = UserNotificationListener.current
-                status = await listener.request_access_async()
+                status = await winrt_thread.guarded(listener.request_access_async(), 10)
                 if status != UserNotificationListenerAccessStatus.ALLOWED:
                     log.warning("No notification access: incoming calls are only noticed once answered")
                     listener = None

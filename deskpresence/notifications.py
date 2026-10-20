@@ -4,6 +4,8 @@ import logging
 import threading
 import time
 
+from . import winrt_thread
+
 log = logging.getLogger(__name__)
 
 try:
@@ -31,7 +33,7 @@ class NotificationWatcher(threading.Thread):
         self._stop.set()
 
     async def _poll(self, listener, first):
-        items = await listener.get_notifications_async(NotificationKinds.TOAST)
+        items = await winrt_thread.guarded(listener.get_notifications_async(NotificationKinds.TOAST), 5)
         current = set()
         for n in items:
             current.add(n.id)
@@ -64,7 +66,7 @@ class NotificationWatcher(threading.Thread):
 
     async def _main(self):
         listener = UserNotificationListener.current
-        status = await listener.request_access_async()
+        status = await winrt_thread.guarded(listener.request_access_async(), 10)
         if status != UserNotificationListenerAccessStatus.ALLOWED:
             log.error("Notification access denied (%s). Enable it in Settings > Privacy > Notifications", status)
             return

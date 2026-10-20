@@ -186,7 +186,7 @@ class CameraShare:
         found = []
         now = snapshot()
         for key, times in now.items():
-            if self._is_own(key):
+            if self._is_own(key) or exe_of_key(key) in NEVER_ASK:
                 continue
             if times[0] > self._last.get(key, (0, 0))[0]:
                 found.append((app_name(key), exe_of_key(key), key, None))
