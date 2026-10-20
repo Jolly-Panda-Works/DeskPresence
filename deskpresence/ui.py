@@ -79,6 +79,7 @@ class UI:
         self._q = queue.Queue()
         self._popups = []
         self._break_wins = []
+        self._fade = []  # [(window, canvas, monitor)] of the away countdown
         self._break_time_labels = []
         self._break_status_labels = []
         self._skip_armed_at = 0.0
@@ -206,6 +207,72 @@ class UI:
         l, t_, r, b = monitor.work
         win.geometry(f"{w}x{h}+{r - w - 12}+{b - h - 12}")
         win.after(int(timeout * 1000), lambda: answer(None))
+
+    # ------------------------------------------------------------ away countdown + fade to black
+    def away_countdown(self, seconds_left, darkness, monitors):
+        """Countdown on every monitor; darkness 0..1 dims the screens toward black."""
+        self.call(self._away_countdown, seconds_left, darkness, monitors)
+
+    def away_countdown_hide(self):
+        self.call(self._away_countdown_hide)
+
+    @staticmethod
+    def _click_through(win):
+        """Let clicks and typing pass through the overlay to the windows below."""
+        try:
+            import ctypes
+            user32 = ctypes.windll.user32
+            hwnd = user32.GetParent(win.winfo_id()) or win.winfo_id()
+            GWL_EXSTYLE, WS_EX_LAYERED, WS_EX_TRANSPARENT, WS_EX_TOOLWINDOW, WS_EX_NOACTIVATE =                 -20, 0x80000, 0x20, 0x80, 0x08000000
+            style = user32.GetWindowLongW(hwnd, GWL_EXSTYLE)
+            user32.SetWindowLongW(hwnd, GWL_EXSTYLE,
+                                  style | WS_EX_LAYERED | WS_EX_TRANSPARENT | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE)
+        except Exception:
+            log.debug("click-through failed", exc_info=True)
+
+    def _away_countdown(self, seconds_left, darkness, monitors):
+        if not self._fade:
+            for mon in monitors:
+                l, t_, r, b = mon.rect
+                win = tk.Toplevel(self.root, bg="black")
+                win.overrideredirect(True)
+                win.attributes("-topmost", True)
+                win.attributes("-alpha", 0.0)
+                win.geometry(f"{r - l}x{b - t_}+{l}+{t_}")
+                cv = tk.Canvas(win, bg="black", highlightthickness=0)
+                cv.pack(fill="both", expand=True)
+                cx, cy = (r - l) // 2, (b - t_) // 2
+                cv.create_oval(cx - 90, cy - 90, cx + 90, cy + 90, outline=ORANGE, width=4, tags="ring")
+                cv.create_text(cx, cy, text="", fill=FG, font=(FONT, 72, "bold"), tags="num")
+                cv.create_text(cx, cy - 140, text="", fill=FG, font=(FONT, 20, "bold"), tags="title")
+                cv.create_text(cx, cy + 140, text=t("countdown.hint"), fill=MUTED, font=(FONT, 13))
+                win.update_idletasks()
+                self._click_through(win)
+                self._fade.append((win, cv, (cx, cy)))
+        n = max(0, int(seconds_left + 0.999))
+        # the countdown stays readable while the screen behind it fades toward black
+        alpha = max(0.35, min(0.95, 0.35 + darkness * 0.6))
+        for win, cv, (cx, cy) in self._fade:
+            try:
+                win.attributes("-alpha", alpha)
+                win.attributes("-topmost", True)
+                cv.itemconfigure("num", text=str(n))
+                cv.itemconfigure("title", text=t("countdown.title", n=n))
+                # the ring empties as the time runs out
+                cv.delete("arc")
+                if darkness < 1:
+                    cv.create_arc(cx - 90, cy - 90, cx + 90, cy + 90, start=90, extent=-360 * (1 - darkness),
+                                  style="arc", outline=ORANGE, width=8, tags="arc")
+            except tk.TclError:
+                pass
+
+    def _away_countdown_hide(self):
+        for win, _cv, _c in self._fade:
+            try:
+                win.destroy()
+            except tk.TclError:
+                pass
+        self._fade = []
 
     # ------------------------------------------------------------ forced break cover
     def break_show(self, monitors, allow_skip, on_skip):

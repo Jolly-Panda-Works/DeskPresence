@@ -38,6 +38,9 @@ DEFAULTS = {
     "back_frames": 3,            # consecutive frames with a face -> back
     "idle_guard_seconds": 20,    # never go "away" if keyboard/mouse was used this recently
     "wake_on_input": True,       # touching the keyboard/mouse while away counts as "back"
+    # before going away: a countdown on every monitor while the screens fade to black
+    "away_countdown": True,
+    "countdown_seconds": 15,     # the countdown shows during the last N seconds
     "laptop_use_camera": False,  # laptop role: also run its own webcam detection
 
     # --- actions ---

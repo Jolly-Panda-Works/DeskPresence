@@ -27,6 +27,7 @@ class FakeUI:
         self.log = []
         self.last_break = None
         self.pending = None
+        self.countdown = []
 
     def popup(self, title, *_a):
         self.log.append(("popup", title))
@@ -39,6 +40,12 @@ class FakeUI:
 
     def break_hide(self):
         self.log.append(("hide",))
+
+    def away_countdown(self, left, darkness, monitors):
+        self.countdown.append((round(left, 1), round(darkness, 2)))
+
+    def away_countdown_hide(self):
+        self.log.append(("countdown_hide",))
 
     def ask(self, title, body, yes, no, callback, monitor, timeout=45):
         self.log.append(("popup", title))

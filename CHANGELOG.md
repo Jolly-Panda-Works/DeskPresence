@@ -7,6 +7,7 @@ Release builds are published automatically from `main`. See the
 
 (1.6 was the first build with the phone app; that work now lives on the `mobile-app` branch.)
 
+- Before you count as away, a countdown appears on every monitor while the screens fade to black; then the monitors turn off. Looking at the camera or touching the mouse / keyboard cancels it. Clicks and typing pass through it. (Settings → Presence → Timing.)
 - Fixed: the app crashed now and then. The list of music and video apps was read from Windows' media controls on several threads; all media access now runs on one thread, and the tray menu reads a cached list.
 - Every unhandled error is written to log.txt, native crashes to crash.txt.
 - After sleep or hibernation every timer (water, break, stand-up) starts over; after a restart they already do.

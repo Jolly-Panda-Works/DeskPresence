@@ -349,6 +349,8 @@ class SettingsWindow:
                      hint=t("set.idle_guard_hint"))
         self._slider(c, t("set.idle_fallback"), "idle_fallback_minutes", 1, 30, 1, unit=t("set.min"),
                      hint=t("set.idle_fallback_hint"))
+        self._switch(c, t("set.countdown"), "away_countdown", hint=t("set.countdown_hint"))
+        self._slider(c, t("set.countdown_seconds"), "countdown_seconds", 3, 30, 1, unit=t("set.sec"))
         self._switch(c, t("set.wake_on_input"), "wake_on_input")
         self._end(c)
 

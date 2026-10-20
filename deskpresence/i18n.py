@@ -120,6 +120,14 @@ STRINGS = {
     "set.pause_on_call_hint": {"fa": "با برنامه Phone Link ویندوز کار می‌کند (گوشی متصل با قابلیت تماس).",
                                "en": "Works with Windows Phone Link (phone connected with calls enabled)."},
 
+    # away countdown
+    "countdown.title": {"fa": "خاموش شدن صفحه‌ها تا {n} ثانیه دیگر", "en": "Screens turn off in {n} s"},
+    "countdown.hint": {"fa": "برای لغو به دوربین نگاه کنید یا موس را تکان دهید", "en": "Look at the camera or move the mouse to cancel"},
+    "set.countdown": {"fa": "شمارش معکوس و تاریک شدن صفحه", "en": "Countdown and fade to black"},
+    "set.countdown_hint": {"fa": "قبل از خاموش شدن، روی هر مانیتور شمارش معکوس نمایش داده می‌شود و صفحه کم‌کم تاریک می‌شود.",
+                           "en": "Before the screens go off, a countdown appears on every monitor while they fade to black."},
+    "set.countdown_seconds": {"fa": "مدت شمارش معکوس", "en": "Countdown length"},
+
     # eyes
     "eyes.on": {"fa": "کنترل موس با چشم روشن شد", "en": "Eye control on"},
     "eyes.off": {"fa": "کنترل موس با چشم خاموش شد", "en": "Eye control off"},

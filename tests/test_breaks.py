@@ -130,3 +130,36 @@ def test_sleep_or_hibernate_restarts_every_timer(sim):
     assert ("hide",) in sim.ui.log
     t = sim.ctrl.timers()
     assert t["water_left"] == 60 * 60 and t["break_left"] == 90 * 60 and t["sitting"] == 0
+
+
+def test_countdown_fades_to_black_then_away(sim):
+    sim.run(60, True)
+    assert sim.ui.countdown == []          # at the desk: nothing on screen
+    sim.run(1.5, False)
+    assert sim.ui.countdown == []          # one missed glance does not start it
+    sim.run(5, False)
+    shown = sim.ui.countdown
+    assert shown, "the countdown should be on screen"
+    lefts = [c[0] for c in shown]
+    darkness = [c[1] for c in shown]
+    assert lefts == sorted(lefts, reverse=True)       # counting down
+    assert darkness == sorted(darkness) and darkness[-1] > 0.2  # getting darker
+    sim.run(10, False)
+    assert sim.ctrl.state == "away"
+    assert ("countdown_hide",) in sim.ui.log           # removed once the screens are off
+
+
+def test_countdown_cancelled_when_you_look_back(sim):
+    sim.run(60, True)
+    sim.run(5, False)
+    assert sim.ui.countdown
+    sim.run(2, True)                         # face seen again
+    assert ("countdown_hide",) in sim.ui.log
+    assert sim.ctrl.state == "present"
+
+
+def test_countdown_can_be_turned_off(sim):
+    sim.ctrl.cfg["away_countdown"] = False
+    sim.run(60, True)
+    sim.run(30, False)
+    assert sim.ui.countdown == [] and sim.ctrl.state == "away"

@@ -55,6 +55,8 @@ class Controller:
         self._eye_close_wanted = False
         self._calls = None
         self._last_wall = time.time()
+        self._countdown_shown = False
+        self._countdown_total = 1.0
         # phone over Bluetooth
         self._phone = None
         self._phone_at_away = None
@@ -418,12 +420,17 @@ class Controller:
         idle = winapi.idle_seconds()
         if self.state == PRESENT:
             if have_source:
-                gone = now - self._last_face >= self.cfg["away_seconds"] and idle >= self.cfg["idle_guard_seconds"]
+                face_gap = now - self._last_face
+                left = max(self.cfg["away_seconds"] - face_gap, self.cfg["idle_guard_seconds"] - idle)
+                noticed = face_gap >= 2  # a single missed frame is not "leaving"
             else:  # no webcam and no phone: only keyboard / mouse inactivity is left
-                gone = idle >= self.cfg["idle_fallback_minutes"] * 60
-            if gone:
+                left = self.cfg["idle_fallback_minutes"] * 60 - idle
+                noticed = True
+            if left <= 0:
                 self.go_away(local=True)
-            elif not self.break_active:
+            else:
+                self._countdown_step(left if noticed and not self.break_active else None)
+            if left > 0 and not self.break_active:
                 self._count_desk_time(now)
                 if obs is not None:
                     self._eye_hotkey()
@@ -452,6 +459,21 @@ class Controller:
             self._set_status(self.status)
 
     # ------------------------------------------------------------ presence actions
+    def _countdown_step(self, left):
+        """Countdown on screen while the screens fade to black; None hides it."""
+        window = self.cfg["countdown_seconds"]
+        if left is None or not self.cfg["away_countdown"] or left > window:
+            if self._countdown_shown:
+                self._countdown_shown = False
+                self.ui.away_countdown_hide()
+            return
+        if not self._countdown_shown:
+            self._countdown_shown = True
+            self._countdown_total = max(1.0, left)
+            log.info("Away countdown started (%.0f s)", left)
+        darkness = 1.0 - left / self._countdown_total
+        self.ui.away_countdown(left, darkness, self.monitors)
+
     def go_away(self, local):
         with self._lock:
             if self.state == AWAY:
@@ -466,6 +488,9 @@ class Controller:
             if self.cfg["turn_off_monitors"]:
                 time.sleep(0.3)
                 winapi.monitors_off()
+            if self._countdown_shown:  # the screens are dark now: remove the countdown
+                self._countdown_shown = False
+                self.ui.away_countdown_hide()
             if local and self.link:
                 self.link.send({"type": "away"})
         self._set_status(AWAY)
