@@ -10,3 +10,7 @@ assets/*.onnx
 deskpresence/_build_version.py
 version_info.txt
 SHA256SUMS.txt
+assets/*.task
+Output/
+Farsi.isl
+*.zip

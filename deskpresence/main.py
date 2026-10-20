@@ -16,7 +16,32 @@ def _setup_logging():
                         format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 
 
+def self_test():
+    """Used by CI on the built app: every module and model loads. Exit code 0 = fine."""
+    import os
+    import tempfile
+    import traceback
+    try:
+        import cv2  # noqa: F401
+        import customtkinter  # noqa: F401
+        from . import camshare, controller, eyetrack, media, notifications, phone, settings_ui, tray  # noqa: F401
+        from .vision import _model_path
+        assert _model_path(), "YuNet model missing"
+        assert eyetrack.available(), "eye-tracking model or mediapipe missing"
+        eyetrack.EyeTracker().close()
+        assert media.HAVE_SMTC and phone.HAVE_BT and notifications.HAVE_LISTENER, "WinRT modules missing"
+        return 0
+    except Exception:
+        with open(os.path.join(tempfile.gettempdir(), "deskpresence-selftest.txt"), "w", encoding="utf-8") as f:
+            traceback.print_exc(file=f)
+        if sys.stderr is not None:
+            traceback.print_exc()
+        return 1
+
+
 def main():
+    if "--self-test" in sys.argv:
+        sys.exit(self_test())
     winapi.set_dpi_aware()
     cfg = Config()
     set_language(cfg["language"])

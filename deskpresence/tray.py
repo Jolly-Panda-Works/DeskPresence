@@ -1,3 +1,4 @@
+import copy
 import logging
 import os
 import sys
@@ -62,6 +63,7 @@ def set_autostart(enabled):
 class Tray:
     def __init__(self, ctrl, cfg, ui):
         self.ctrl, self.cfg, self.ui = ctrl, cfg, ui
+        self._settings = None
         I, M = pystray.MenuItem, pystray.Menu
 
         def tr(key):  # menu text is evaluated each time the menu is rebuilt
@@ -71,13 +73,24 @@ class Tray:
             return I(LANGUAGES[code], lambda: self._set_language(code), radio=True,
                      checked=lambda _: language() == code)
 
+        def mouse_item(mode, key):
+            return I(tr(key), lambda: self._set_mouse_mode(mode), radio=True,
+                     checked=lambda _: cfg["mouse_mode"] == mode)
+
         cam = lambda _: ctrl.uses_camera  # noqa: E731
         menu = M(
             I(lambda _: self._status_text(), None, enabled=False),
             M.SEPARATOR,
+            I(tr("menu.open_settings"), self.open_settings, default=True),
             I(tr("menu.pause"), self._toggle_pause, checked=lambda _: ctrl.paused),
-            I(tr("menu.gaze"), self._toggle_gaze, checked=lambda _: cfg["gaze_follow"], visible=cam),
-            I(tr("menu.calibrate"), lambda: ctrl.start_calibration(), visible=cam),
+            I(tr("menu.mouse"), M(
+                mouse_item("off", "set.mouse_off"),
+                mouse_item("monitor", "set.mouse_monitor"),
+                mouse_item("eyes", "set.mouse_eyes"),
+                M.SEPARATOR,
+                I(tr("menu.calibrate"), lambda: ctrl.start_calibration()),
+                I(tr("set.eyes_cal"), lambda: ctrl.start_eye_calibration()),
+            ), visible=cam),
             I(tr("menu.break_now"), lambda: ctrl.start_break(),
               visible=lambda _: ctrl.uses_camera and not ctrl.break_active),
             I(tr("menu.break_end"), lambda: ctrl.end_break(skipped=True),
@@ -87,7 +100,7 @@ class Tray:
             I(tr("menu.autostart"), self._toggle_autostart, checked=lambda _: autostart_enabled()),
             I(tr("menu.language"), M(lang_item("fa"), lang_item("en"))),
             I(tr("menu.media"), M(self._media_items), visible=lambda _: cfg["pause_media"]),
-            I(tr("menu.settings"), lambda: os.startfile(CONFIG_PATH)),
+            I(tr("menu.settings_file"), lambda: os.startfile(CONFIG_PATH)),
             I(tr("menu.reload"), self._reload),
             I(tr("menu.folder"), lambda: os.startfile(APP_DIR)),
             M.SEPARATOR,
@@ -158,8 +171,20 @@ class Tray:
     def _toggle_pause(self):
         self.ctrl.set_paused(not self.ctrl.paused)
 
-    def _toggle_gaze(self):
-        self.cfg.set("gaze_follow", not self.cfg["gaze_follow"])
+    def _set_mouse_mode(self, mode):
+        old = copy.deepcopy(self.cfg.data)
+        self.cfg.set("mouse_mode", mode)
+        self.ctrl.apply_settings(old)
+
+    def open_settings(self):
+        self.ui.call(self._open_settings)
+
+    def _open_settings(self):  # runs on the Tk thread
+        from .settings_ui import SettingsWindow
+        if self._settings is not None and self._settings.alive:
+            self._settings.lift()
+            return
+        self._settings = SettingsWindow(self.ui, self.ctrl, self.cfg, self.refresh)
 
     def _toggle_autostart(self):
         set_autostart(not autostart_enabled())

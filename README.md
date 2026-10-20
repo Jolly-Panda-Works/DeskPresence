@@ -12,7 +12,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Platform](https://img.shields.io/badge/platform-Windows%2010%20%7C%2011-lightgrey)](#download)
 
-[Download](https://github.com/Jolly-Panda-Works/DeskPresence/releases/latest/download/DeskPresence.exe) · [فارسی](README.fa.md) · [Report a bug](https://github.com/Jolly-Panda-Works/DeskPresence/issues/new?template=bug_report.md) · [Request a feature](https://github.com/Jolly-Panda-Works/DeskPresence/issues/new?template=feature_request.md)
+[Download](https://github.com/Jolly-Panda-Works/DeskPresence/releases/latest/download/DeskPresence_Setup.exe) · [فارسی](README.fa.md) · [Report a bug](https://github.com/Jolly-Panda-Works/DeskPresence/issues/new?template=bug_report.md) · [Request a feature](https://github.com/Jolly-Panda-Works/DeskPresence/issues/new?template=feature_request.md)
 
 ---
 
@@ -20,14 +20,17 @@
 
 | | |
 |---|---|
-| **Leave the desk** | No face for ~10 seconds (and no keyboard/mouse use) → music and videos pause and all monitors turn off. The PC keeps running. |
+| **Leave the desk** | The webcam no longer sees you, or your phone leaves Bluetooth range (and the keyboard/mouse is idle) → music and videos pause and all monitors turn off. The PC keeps running. |
 | **Come back** | Monitors turn back on and the **music** DeskPresence paused plays again. Videos stay paused. |
-| **Mouse follows your gaze** | After a 10-second calibration, the cursor jumps to the monitor you turn to, back to where it was on that monitor. |
+| **Mouse follows your gaze** | *Jump to monitor*: turn your head and the cursor jumps to that monitor. *Follow my eyes*: the cursor moves to where you look (iris tracking, toggle with Ctrl+Alt+E). |
+| **Phone instead of webcam** | Use your paired phone over Bluetooth, with or without the webcam. No app needed on the phone. |
+| **Shares the webcam** | When another app (a video call, the Camera app, ...) wants the webcam, DeskPresence asks and hands it over, then takes it back when that app is done. |
+| **Settings window** | Every option, a live webcam preview, phone range test, laptop pairing with automatic discovery and a connection test. |
 | **Water reminder** | Every hour: “Time to drink water!” (waits until you are at the desk). |
 | **Forced break** | After 90 minutes of work, every screen is covered for a 10-minute break. The countdown **only runs while the camera does not see you**, so sitting there does not count. Leaving for 10+ minutes on your own counts as a break too. |
 | **Laptop companion** | Run it on your laptop too: its screen and music follow the desktop, it shows the break screen, and its notifications are forwarded to one monitor of the desktop. |
 | **Mouse Without Borders** | Use one mouse and keyboard for both machines (PowerToys). Optionally the cursor even moves to the laptop when you look at it. |
-| **Persian and English** | Switch from the tray menu → Language. |
+| **Persian and English** | The app and the installer. Switch in Settings → General. |
 
 Everything runs locally. Webcam frames are processed in memory and are never saved or uploaded. See [PRIVACY.md](PRIVACY.md).
 
@@ -45,38 +48,48 @@ To change any app: tray menu → **Music & video apps** → *Music: pause and re
 
 ## Download
 
-1. Download **[DeskPresence.exe](https://github.com/Jolly-Panda-Works/DeskPresence/releases/latest/download/DeskPresence.exe)** from the latest release. It is a single portable file, so there is nothing to install.
-2. Run it. An orange icon appears next to the clock. The coloured dot shows the status: green = at the desk, yellow = away, blue = on a break, grey = paused.
-3. Tray menu → **Calibrate gaze…** and look at the dot on each monitor.
-4. Tray menu → **Start with Windows**.
+1. Download **[DeskPresence_Setup.exe](https://github.com/Jolly-Panda-Works/DeskPresence/releases/latest/download/DeskPresence_Setup.exe)** and run it. The installer asks where to install, and offers a desktop shortcut and *Start with Windows*. No administrator rights are needed.
+   Prefer no installer? Download **[DeskPresence_Portable.zip](https://github.com/Jolly-Panda-Works/DeskPresence/releases/latest/download/DeskPresence_Portable.zip)**, unzip it anywhere and run `DeskPresence.exe`.
+2. An orange icon appears next to the clock. The coloured dot shows the status: green = at the desk, yellow = away, blue = on a break, grey = paused. **Left-click it to open Settings.**
+3. In Settings → *Mouse & gaze*, choose a mode and run its calibration.
 
-> Windows SmartScreen may warn about an unsigned app the first time: *More info → Run anyway*. The SHA-256 checksum of every release is in `SHA256SUMS.txt`.
+> Windows SmartScreen may warn about an unsigned app the first time: *More info → Run anyway*. The SHA-256 checksums of every release are in `SHA256SUMS.txt`.
+
+## Phone over Bluetooth
+
+1. Pair your phone with the PC once (Windows Settings → Bluetooth & devices → Add device).
+2. DeskPresence → Settings → *Phone (Bluetooth)*: choose the phone and press *Test*.
+3. Settings → *Presence* → *Detect with*: **Phone** (no webcam at all) or **Both** (away only when neither the webcam nor the phone sees you).
+
+The phone is checked every few seconds. A phone in range answers within a fraction of a second; when it is out of range (about 5–10 m, depending on walls) it stops answering and you count as away. If you leave the phone on the desk, use the webcam instead.
+
+## Sharing the webcam
+
+Most webcams can only be used by one app at a time. When another app starts using it, DeskPresence asks *“Zoom wants to use the webcam — hand it over?”* (or always / never, in Settings → Presence). While that app has it, presence comes from your phone, or from keyboard/mouse inactivity (5 minutes by default). When that app is done, DeskPresence takes the webcam back by itself.
 
 ## Laptop setup
 
-1. Install **[PowerToys](https://learn.microsoft.com/windows/powertoys/)** on both machines and pair them in **Mouse Without Borders**.
-2. On the desktop: tray menu → *Edit settings*, set `"network_enabled": true` and copy the `token`.
-3. On the laptop, in its settings file:
-   ```json
-   "role": "laptop",
-   "network_enabled": true,
-   "desktop_host": "192.168.1.10",
-   "token": "<the desktop's token>"
-   ```
-4. Restart DeskPresence on both. Allow it on **Private** networks if the Windows firewall asks.
-5. On the laptop, turn on **Do not disturb**. Its notifications are still forwarded and are shown on the desktop monitor set in `notification_monitor`.
+1. Install DeskPresence on both machines (and **[PowerToys](https://learn.microsoft.com/windows/powertoys/)** with **Mouse Without Borders** for one mouse and keyboard).
+2. On the main PC: Settings → *Laptop link* → turn on *Link enabled* → **Copy** the token → *Save*.
+3. On the laptop: Settings → *General* → *This device is* → **Companion laptop** → *Save*. Then *Laptop link* → *Link enabled*, **Find automatically**, paste the token, **Test**, *Save*.
+4. Allow DeskPresence on **Private** networks if the Windows firewall asks.
+5. On the laptop, turn on **Do not disturb**. Its notifications are still forwarded and appear on the monitor chosen in *Laptop link → Notifications*.
 
-Windows always shows the desktop's own notifications on the *main display*. To choose which monitor that is: Settings → System → Display → *Make this my main display*.
-
-**Gaze → laptop (experimental):** in Mouse Without Borders, set the *switch between machines* shortcut to Ctrl+Alt+F1…F4. Then set `"mwb": {"enabled": true, "desktop_hotkey": 1, "laptop_hotkey": 2}` and calibrate again.
+Windows always shows the main PC's own notifications on the *main display*. To choose which monitor that is: Windows Settings → System → Display → *Make this my main display*.
 
 ## Settings
 
-The settings file is `%APPDATA%\DeskPresence\config.json` (tray menu → *Edit settings*, then *Apply saved settings*).
+Everything is in the Settings window. The same values live in `%APPDATA%\DeskPresence\config.json` (tray menu → *Settings file (advanced)*, then *Apply saved settings*).
 
 | Key | Default | Meaning |
 |---|---|---|
 | `language` | `auto` | `auto`, `fa` or `en` |
+| `presence_source` | `camera` | `camera`, `phone` or `both` |
+| `phone` | | `device_id`, `check_seconds` (8), `away_checks` (2) |
+| `camera_share` | `ask` | `ask`, `always` or `never` |
+| `idle_fallback_minutes` | 5 | Away after this much inactivity when neither webcam nor phone is available |
+| `mouse_mode` | `monitor` | `off`, `monitor` or `eyes` |
+| `eye_deadzone_px` | 90 | Eye mode ignores gaze changes smaller than this |
 | `away_seconds` | 10 | Seconds without a face before you count as away |
 | `idle_guard_seconds` | 20 | Never turn anything off if the keyboard/mouse was used this recently |
 | `wake_on_input` | true | Touching the keyboard/mouse also means you are back |
@@ -104,11 +117,11 @@ Run the tests with `python -m pytest`. Regenerate the icons with `python tools/m
 
 ## How the GitHub Action builds it
 
-Every push builds `DeskPresence.exe` on `windows-latest` after the tests pass, and keeps it for 14 days under *Actions → the run → Artifacts*.
+Every push builds DeskPresence on `windows-latest` after the tests pass, self-tests the built app, packs the installer (Inno Setup, English + Persian) and a portable zip, and keeps it for 14 days under *Actions → the run → Artifacts*.
 
 | Build from | Version | Published |
 |---|---|---|
-| `main` | `MAJOR.MINOR.<run number>`, e.g. `1.1.42` | Git tag + public GitHub Release with the exe |
+| `main` | `MAJOR.MINOR.<run number>`, e.g. `1.3.42` | Git tag + public GitHub Release with the installer and the portable zip |
 | a tag `vX.Y.Z` | `X.Y.Z` | GitHub Release |
 | any other branch / PR | `MAJOR.MINOR.0-dev.<run>` | Artifact only |
 
@@ -120,6 +133,10 @@ Every push builds `DeskPresence.exe` on `windows-latest` after the tests pass, a
 deskpresence/
   controller.py     presence state machine, breaks, water, gaze -> cursor, laptop sync
   vision.py         webcam + YuNet face detector + head-pose estimate
+  eyetrack.py       MediaPipe iris tracking -> cursor (calibrated regression)
+  phone.py          Bluetooth phone presence
+  camshare.py       notices other apps that want the webcam
+  settings_ui.py    the Settings window (customtkinter)
   media.py          pause / resume through Windows media sessions
   winapi.py         monitors, cursor, power, keyboard (ctypes)
   network.py        desktop <-> laptop link (JSON lines over TCP, shared token)
@@ -139,4 +156,4 @@ Pull requests are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md). Please report
 
 [MIT](LICENSE) © 2026 [Usef Farahmand](https://github.com/Usef-Farahmand) · [useffarahmand.com](https://www.useffarahmand.com/)
 
-Face detection uses the [YuNet](https://github.com/opencv/opencv_zoo/tree/main/models/face_detection_yunet) model from OpenCV Zoo (MIT).
+Face detection uses the [YuNet](https://github.com/opencv/opencv_zoo/tree/main/models/face_detection_yunet) model from OpenCV Zoo (MIT). Eye tracking uses Google's [MediaPipe Face Landmarker](https://ai.google.dev/edge/mediapipe/solutions/vision/face_landmarker) (Apache 2.0).

@@ -3,6 +3,14 @@
 Release builds are published automatically from `main`. See the
 [Releases page](https://github.com/Jolly-Panda-Works/DeskPresence/releases) for every build's notes.
 
+## 1.3
+
+- Settings window for every option: live webcam preview, phone range test, laptop pairing with automatic discovery and a connection test.
+- Installer (asks for the install folder, desktop shortcut, start with Windows; English and Persian) and a portable zip.
+- Cursor follows your eyes: MediaPipe iris tracking with a 5-dots-per-monitor calibration (Ctrl+Alt+E to toggle).
+- Presence through your phone over Bluetooth, with or without the webcam.
+- Webcam sharing: asks before handing the webcam to another app and takes it back afterwards.
+
 ## 1.2
 
 - Music and video are handled differently: music (Spotify, Radio Javan, Media Player, ...) is paused and resumed; videos (YouTube, Media Player, Movies & TV, ...) are only paused.

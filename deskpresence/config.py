@@ -19,6 +19,19 @@ DEFAULTS = {
     "language": "auto",          # "auto" (Windows language), "fa" or "en"
 
     # --- presence detection ---
+    # what tells DeskPresence you are at the desk:
+    #   "camera" = webcam, "phone" = your phone over Bluetooth, "both" = away only when neither sees you
+    "presence_source": "camera",
+    "phone": {
+        "device_id": "",       # a paired Bluetooth device, chosen in the settings window
+        "name": "",
+        "check_seconds": 8,    # how often the phone is probed
+        "away_checks": 2,      # failed probes in a row before it counts as gone
+    },
+    # when another app wants the webcam: "ask", "always" (hand it over), "never"
+    "camera_share": "ask",
+    # with no camera or phone available, keyboard/mouse inactivity this long means away
+    "idle_fallback_minutes": 5,
     "camera_index": 0,
     "camera_fps": 8,
     "away_seconds": 10,          # no face for this long -> away
@@ -46,11 +59,15 @@ DEFAULTS = {
         "allow_skip": True,           # emergency skip button (needs a double click)
     },
 
-    # --- gaze -> mouse ---
-    "gaze_follow": True,
+    # --- mouse ---
+    # "off", "monitor" (cursor jumps to the monitor you face) or "eyes" (cursor follows your eyes)
+    "mouse_mode": "monitor",
     "gaze_stable_seconds": 0.6,
     "gaze_mouse_quiet_seconds": 0.8,  # don't steal the cursor right after you moved it
     "calibration": {},                # target name -> [yaw, pitch]
+    "eye_calibration": {},            # regression weights from the eye calibration
+    "eye_deadzone_px": 90,            # ignore gaze changes smaller than this
+    "eye_pause_after_mouse_seconds": 1.5,
 
     # --- Mouse Without Borders (PowerToys) integration ---
     "mwb": {
@@ -73,10 +90,22 @@ DEFAULTS = {
 }
 
 
+# dicts that are stored as a whole instead of merged key by key with the defaults
+WHOLE_DICTS = ("calibration", "eye_calibration", "media_apps")
+
+
+def _migrate(user):
+    """Older config files -> current keys."""
+    if "mouse_mode" not in user and "gaze_follow" in user:
+        user["mouse_mode"] = "monitor" if user["gaze_follow"] else "off"
+    user.pop("gaze_follow", None)
+    return user
+
+
 def _merge(base, override):
     out = copy.deepcopy(base)
     for k, v in override.items():
-        if isinstance(v, dict) and isinstance(out.get(k), dict) and k != "calibration":
+        if isinstance(v, dict) and isinstance(out.get(k), dict) and k not in WHOLE_DICTS:
             out[k] = _merge(out[k], v)
         else:
             out[k] = v
@@ -99,7 +128,7 @@ class Config:
             except Exception:
                 log.exception("Invalid config.json, using defaults")
         with self._lock:
-            self.data = _merge(DEFAULTS, user)
+            self.data = _merge(DEFAULTS, _migrate(user))
             if not self.data["token"]:
                 self.data["token"] = secrets.token_urlsafe(16)
         self.save()

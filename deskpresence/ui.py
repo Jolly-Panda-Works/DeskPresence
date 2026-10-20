@@ -160,6 +160,51 @@ class UI:
         bind_all(win)
         win.after(int(seconds * 1000), close)
 
+    # ------------------------------------------------------------ question box
+    def ask(self, title, body, yes_text, no_text, callback, monitor, timeout=45):
+        """Small topmost question on `monitor`; callback(True/False). No answer = False."""
+        self.call(self._ask, title, body, yes_text, no_text, callback, monitor, timeout)
+
+    def _ask(self, title, body, yes_text, no_text, callback, monitor, timeout):
+        anchor, justify = _align()
+        w = 420
+        win = tk.Toplevel(self.root, bg=BORDER)
+        win.overrideredirect(True)
+        win.attributes("-topmost", True)
+        frame = tk.Frame(win, bg=PANEL)
+        frame.pack(fill="both", expand=True, padx=1, pady=1)
+        tk.Frame(frame, bg=ORANGE, height=3).pack(fill="x")
+        tk.Label(frame, text=APP_NAME.upper(), bg=PANEL, fg=ORANGE, font=(FONT, 8, "bold"),
+                 anchor=anchor).pack(fill="x", padx=16, pady=(12, 0))
+        tk.Label(frame, text=title, bg=PANEL, fg=FG, font=(FONT, 12, "bold"), anchor=anchor,
+                 justify=justify, wraplength=w - 32).pack(fill="x", padx=16, pady=(4, 2))
+        tk.Label(frame, text=body, bg=PANEL, fg=MUTED, font=(FONT, 10), anchor=anchor,
+                 justify=justify, wraplength=w - 32).pack(fill="x", padx=16, pady=(0, 12))
+        row = tk.Frame(frame, bg=PANEL)
+        row.pack(fill="x", padx=16, pady=(0, 14))
+        done = {"v": False}
+
+        def answer(value):
+            if done["v"]:
+                return
+            done["v"] = True
+            if win.winfo_exists():
+                win.destroy()
+            callback(value)
+
+        side = "left" if is_rtl() else "right"
+        tk.Button(row, text=yes_text, command=lambda: answer(True), bg=ORANGE, fg=ON_ORANGE,
+                  activebackground=ORANGE_H, activeforeground=ON_ORANGE, relief="flat", bd=0,
+                  font=(FONT, 10, "bold"), padx=16, pady=6, cursor="hand2").pack(side=side)
+        tk.Button(row, text=no_text, command=lambda: answer(False), bg=PANEL_H, fg=FG,
+                  activebackground=BORDER, activeforeground=FG, relief="flat", bd=0,
+                  font=(FONT, 10), padx=16, pady=6, cursor="hand2").pack(side=side, padx=8)
+        win.update_idletasks()
+        h = win.winfo_reqheight()
+        l, t_, r, b = monitor.work
+        win.geometry(f"{w}x{h}+{r - w - 12}+{b - h - 12}")
+        win.after(int(timeout * 1000), lambda: answer(False))
+
     # ------------------------------------------------------------ forced break cover
     def break_show(self, monitors, allow_skip, on_skip):
         self.call(self._break_show, monitors, allow_skip, on_skip)
@@ -291,6 +336,74 @@ class UI:
         sw, sh = win.winfo_screenwidth(), win.winfo_screenheight()
         win.geometry(f"{w}x{h}+{(sw - w) // 2}+{(sh - h) // 2}")
         win.focus_force()
+
+    # ------------------------------------------------------------ eye calibration
+    def calibrate_points(self, points, sample_fn, on_done):
+        """points: [(monitor, x, y)] in screen pixels. sample_fn() -> features | None.
+        on_done([(features, (x, y)), ...]) or on_done(None) when cancelled."""
+        self.call(self._calibrate_points, points, sample_fn, on_done)
+
+    def _calibrate_points(self, points, sample_fn, on_done):
+        samples = []
+        wins = {}
+        state = {"cancel": False}
+
+        def cancel(_e=None):
+            state["cancel"] = True
+
+        # one dark cover per monitor, the dot moves between them
+        for mon in {id(p[0]): p[0] for p in points}.values():
+            l, t_, r, b = mon.rect
+            win = tk.Toplevel(self.root, bg=BG)
+            win.overrideredirect(True)
+            win.attributes("-topmost", True)
+            win.geometry(f"{r - l}x{b - t_}+{l}+{t_}")
+            cv = tk.Canvas(win, bg=BG, highlightthickness=0)
+            cv.pack(fill="both", expand=True)
+            win.bind("<Escape>", cancel)
+            wins[id(mon)] = (win, cv, mon)
+        first = next(iter(wins.values()))
+        first[1].create_text((first[2].rect[2] - first[2].rect[0]) // 2, 60, text=t("eyes.cal_hint"),
+                             fill=MUTED, font=(FONT, 14), tags="hint")
+        first[0].focus_force()
+
+        def finish(result):
+            for win, _cv, _m in wins.values():
+                if win.winfo_exists():
+                    win.destroy()
+            on_done(result)
+
+        def show(i):
+            if state["cancel"]:
+                finish(None)
+                return
+            if i >= len(points):
+                finish(samples)
+                return
+            mon, x, y = points[i]
+            for _w, cv, _m in wins.values():
+                cv.delete("dot")
+            win, cv, _ = wins[id(mon)]
+            cx, cy = x - mon.rect[0], y - mon.rect[1]
+            cv.create_oval(cx - 22, cy - 22, cx + 22, cy + 22, outline=ORANGE, width=2, tags="dot")
+            cv.create_oval(cx - 9, cy - 9, cx + 9, cy + 9, fill=ORANGE, outline="", tags="dot")
+            cv.create_text(cx, cy + 44 if cy < 200 else cy - 44, text=f"{i + 1}/{len(points)}",
+                           fill=FAINT_TEXT, font=(FONT, 10), tags="dot")
+            win.after(1100, collect, i, 1300)
+
+        def collect(i, left_ms):
+            if state["cancel"]:
+                finish(None)
+                return
+            s = sample_fn()
+            if s is not None:
+                samples.append((s, (points[i][1], points[i][2])))
+            if left_ms > 0:
+                self.root.after(80, collect, i, left_ms - 80)
+            else:
+                show(i + 1)
+
+        self.root.after(1500, show, 0)
 
     # ------------------------------------------------------------ calibration
     def calibrate(self, targets, sample_fn, on_done):

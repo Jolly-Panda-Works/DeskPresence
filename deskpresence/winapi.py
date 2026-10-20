@@ -101,6 +101,10 @@ def set_cursor(x, y):
     user32.SetCursorPos(int(x), int(y))
 
 
+def keys_down(*vks):
+    return all(user32.GetAsyncKeyState(vk) & 0x8000 for vk in vks)
+
+
 def mouse_button_down():
     return bool(user32.GetAsyncKeyState(VK_LBUTTON) & 0x8000 or user32.GetAsyncKeyState(VK_RBUTTON) & 0x8000)
 

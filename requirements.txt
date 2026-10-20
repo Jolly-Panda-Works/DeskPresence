@@ -1,4 +1,6 @@
-opencv-python-headless>=4.8
+opencv-contrib-python>=4.8
+mediapipe>=0.10.14
+customtkinter>=5.2
 numpy>=1.26
 pystray>=0.19.5
 Pillow>=10.0
@@ -10,3 +12,6 @@ winrt-Windows.Media.Control>=2.0
 winrt-Windows.UI.Notifications>=2.0
 winrt-Windows.UI.Notifications.Management>=2.0
 winrt-Windows.ApplicationModel>=2.0
+winrt-Windows.Devices.Bluetooth>=2.0
+winrt-Windows.Devices.Bluetooth.Rfcomm>=2.0
+winrt-Windows.Devices.Enumeration>=2.0

@@ -50,22 +50,59 @@ jobs:
           echo "Building DeskPresence $version"
           echo "version=$version" >> "$GITHUB_OUTPUT"
 
-      - name: Download face model
+      - name: Download face models
         run: python scripts/download_model.py
 
-      - name: Build exe
+      # --onedir starts much faster than --onefile (nothing to unpack on every launch);
+      # the installer and the portable zip both ship this folder.
+      - name: Build app
         run: >
-          pyinstaller --noconfirm --onefile --windowed --name DeskPresence
+          pyinstaller --noconfirm --onedir --windowed --name DeskPresence
           --icon assets/icon.ico
           --version-file version_info.txt
           --add-data "assets;assets"
           --collect-submodules winrt
+          --collect-all mediapipe
+          --collect-data customtkinter
           --hidden-import pystray._win32
           run.py
 
-      - name: Create checksum
+      - name: Smoke test the build
+        shell: pwsh
         run: |
-          Get-FileHash dist\DeskPresence.exe -Algorithm SHA256 | ForEach-Object { "$($_.Hash.ToLower())  DeskPresence.exe" } | Set-Content -Encoding ascii SHA256SUMS.txt
+          $p = Start-Process dist\DeskPresence\DeskPresence.exe -ArgumentList "--self-test" -PassThru -Wait
+          if ($p.ExitCode -ne 0) { throw "Self-test failed with exit code $($p.ExitCode)" }
+
+      # Inno Setup is preinstalled on GitHub's Windows runners; install it only if it is ever missing.
+      - name: Make sure Inno Setup is available
+        shell: pwsh
+        run: |
+          $iscc = "C:\Program Files (x86)\Inno Setup 6\ISCC.exe"
+          if (-not (Test-Path $iscc)) { choco install innosetup -y --no-progress }
+          if (-not (Test-Path $iscc)) { throw "Inno Setup not found" }
+
+      - name: Build installer
+        shell: pwsh
+        run: |
+          $iscc = "C:\Program Files (x86)\Inno Setup 6\ISCC.exe"
+          # Persian setup wizard (unofficial Inno Setup translation); English only if it is unavailable
+          try {
+            Invoke-WebRequest https://raw.githubusercontent.com/jrsoftware/issrc/main/Files/Languages/Unofficial/Farsi.isl -OutFile Farsi.isl
+          } catch { Write-Warning "Farsi.isl not available" }
+          & $iscc /DMyAppVersion=${{ steps.ver.outputs.version }} installer.iss
+          if ($LASTEXITCODE -ne 0 -and (Test-Path Farsi.isl)) {
+            Write-Warning "Retrying without the Persian wizard"
+            Remove-Item Farsi.isl
+            & $iscc /DMyAppVersion=${{ steps.ver.outputs.version }} installer.iss
+          }
+          if ($LASTEXITCODE -ne 0) { throw "ISCC failed" }
+
+      - name: Zip portable version
+        run: Compress-Archive -Path dist\DeskPresence -DestinationPath DeskPresence_Portable.zip
+
+      - name: Create checksums
+        run: |
+          Get-FileHash Output\DeskPresence_Setup.exe, DeskPresence_Portable.zip -Algorithm SHA256 | ForEach-Object { "$($_.Hash.ToLower())  $(Split-Path $_.Path -Leaf)" } | Set-Content -Encoding ascii SHA256SUMS.txt
 
       # Every build (any branch, pull requests, main, tags) keeps its output for two weeks:
       # Actions -> the run -> Artifacts.
@@ -73,7 +110,8 @@ jobs:
         with:
           name: DeskPresence-${{ steps.ver.outputs.version }}
           path: |
-            dist/DeskPresence.exe
+            Output/DeskPresence_Setup.exe
+            DeskPresence_Portable.zip
             SHA256SUMS.txt
           retention-days: 14
 
@@ -100,5 +138,6 @@ jobs:
           target_commitish: ${{ github.sha }}
           generate_release_notes: true
           files: |
-            dist/DeskPresence.exe
+            Output/DeskPresence_Setup.exe
+            DeskPresence_Portable.zip
             SHA256SUMS.txt

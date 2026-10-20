@@ -56,7 +56,7 @@ def sim(monkeypatch):
     monkeypatch.setattr(winapi, "monitors_off", lambda: None)
     monkeypatch.setattr(winapi, "monitors_on", lambda: None)
     cfg = FakeConfig(copy.deepcopy(config.DEFAULTS))
-    cfg.update(pause_media=False, turn_off_monitors=False, gaze_follow=False, break_reminder_minutes=0)
+    cfg.update(pause_media=False, turn_off_monitors=False, mouse_mode="off", break_reminder_minutes=0)
     ui = FakeUI()
     clock = {"t": 0.0}
     monkeypatch.setattr(controller.time, "monotonic", lambda: clock["t"])

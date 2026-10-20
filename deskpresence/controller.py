@@ -1,19 +1,26 @@
 """The brain: presence state machine, gaze->cursor, desktop<->laptop sync."""
+import copy
 import logging
+import math
 import threading
 import time
 
-from . import winapi
+from . import eyetrack, winapi
 from .i18n import t
 from .media import MediaController
 from .network import Link
+from .camshare import CameraShare
 from .notifications import NotificationWatcher
+from .phone import PhoneWatcher
 from .vision import FaceSensor, GazeClassifier
 
 log = logging.getLogger(__name__)
 
 PRESENT, AWAY = "present", "away"
 LAPTOP = "laptop"
+MOUSE_OFF, MOUSE_MONITOR, MOUSE_EYES = "off", "monitor", "eyes"
+NETWORK_KEYS = ("network_enabled", "role", "port", "desktop_host", "token",
+                "forward_notifications", "dismiss_forwarded")
 
 
 class Controller:
@@ -31,6 +38,29 @@ class Controller:
         self.gaze = GazeClassifier(cfg["calibration"], cfg["gaze_stable_seconds"])
         self.sensor = None
         self.link = None
+        self._watcher = None
+        # eye tracking (mouse_mode == "eyes")
+        self._eye = None
+        self._eye_failed = False
+        self.eye_active = True                 # toggled with Ctrl+Alt+E
+        self.eye_mapper = eyetrack.GazeMapper(cfg["eye_calibration"])
+        self._eye_filter = eyetrack.OneEuro()
+        self._eye_feat = None
+        self._eye_feat_at = 0.0
+        self._eye_set = None
+        self._eye_prev = None
+        self._eye_hold_until = 0.0
+        self._hotkey_down = False
+        # phone over Bluetooth
+        self._phone = None
+        self._phone_at_away = None
+        # webcam sharing with other apps
+        self._camshare = None
+        self._share_checked_at = 0.0
+        self._share_declined = {}
+        self._asking = False
+        self.camera_lent_to = None             # (registry key, app name) while another app has it
+        self._lent_free_since = None
         self._lock = threading.RLock()
         self._stop = threading.Event()
         self._reopen = False
@@ -67,29 +97,56 @@ class Controller:
         return self.role == "desktop" or self.cfg["laptop_use_camera"]
 
     def start(self):
+        self._start_network()
+        threading.Thread(target=self._run, daemon=True, name="controller").start()
+
+    def _start_network(self):
         if self.cfg["network_enabled"]:
             self.link = Link(self.role, self.cfg["port"], self.cfg["token"], self.cfg["desktop_host"],
                              on_message=self._on_remote, on_status=self._on_link_status)
             self.link.start()
         if self.role == LAPTOP and self.cfg["network_enabled"] and self.cfg["forward_notifications"]:
-            NotificationWatcher(self._forward_notification, self.cfg["dismiss_forwarded"]).start()
-        threading.Thread(target=self._run, daemon=True, name="controller").start()
+            self._watcher = NotificationWatcher(self._forward_notification, self.cfg["dismiss_forwarded"])
+            self._watcher.start()
+
+    def _stop_network(self):
+        if self.link:
+            self.link.stop()
+            self.link = None
+        if self._watcher:
+            self._watcher.stop()
+            self._watcher = None
+        self.peer_connected = False
 
     def stop(self):
         self._stop.set()
         if self.state == AWAY:
             self.come_back(local=True)
-        if self.link:
-            self.link.stop()
+        self._stop_network()
 
     def reload(self):
-        old_cam = self.cfg["camera_index"]
+        """Re-reads config.json from disk (after editing it by hand)."""
+        old = copy.deepcopy(self.cfg.data)
         self.cfg.load()
-        self.gaze = GazeClassifier(self.cfg["calibration"], self.cfg["gaze_stable_seconds"])
+        self.apply_settings(old)
+
+    def apply_settings(self, old):
+        """Applies changed settings at once; called after the settings window saves."""
+        new = self.cfg.data
+        self.gaze = GazeClassifier(new["calibration"], new["gaze_stable_seconds"])
+        self.eye_mapper = eyetrack.GazeMapper(new["eye_calibration"])
         self.monitors = winapi.list_monitors()
-        if self.cfg["camera_index"] != old_cam:
+        if new["camera_index"] != old.get("camera_index"):
             self._reopen = True
-        self._set_status(self.status)
+        if any(new.get(k) != old.get(k) for k in NETWORK_KEYS):
+            log.info("Network settings changed, restarting the link")
+            self._stop_network()
+            self._start_network()
+        if new["water_reminder_minutes"] != old.get("water_reminder_minutes"):
+            self._next_water = time.monotonic() + new["water_reminder_minutes"] * 60
+        if new["mouse_mode"] != MOUSE_EYES:
+            self._close_eye()
+        self._set_status(self.state if self.uses_camera else "laptop_wait")
 
     def set_paused(self, paused):
         self.paused = paused
@@ -107,75 +164,207 @@ class Controller:
             log.exception("on_state failed")
 
     # ------------------------------------------------------------ main loop
+    @property
+    def camera_wanted(self):
+        return (self.uses_camera and not self.paused and self.camera_lent_to is None
+                and (self.cfg["presence_source"] in ("camera", "both") or self.cfg["mouse_mode"] != MOUSE_OFF))
+
+    @property
+    def phone_wanted(self):
+        return (self.uses_camera and not self.paused and self.cfg["presence_source"] in ("phone", "both")
+                and bool(self.cfg["phone"]["device_id"]))
+
     def _run(self):
-        if not self.uses_camera:
-            self._set_status("laptop_wait")
-            self._stop.wait()
-            return
         errors = 0
+        camera_retry_at = 0.0
         while not self._stop.is_set():
-            if self.paused:
+            if not self.uses_camera:  # laptop role: the desktop drives everything
                 self._close_sensor()
+                self._sync_phone()
+                if self.status != "laptop_wait":
+                    self._set_status("laptop_wait")
                 self._stop.wait(0.5)
                 continue
-            if self.sensor is None or self._reopen:
-                self._reopen = False
+            if self.paused:
                 self._close_sensor()
-                try:
-                    self.sensor = FaceSensor(self.cfg["camera_index"])
-                    self._last_face = time.monotonic()
-                    self._set_status(self.state)
-                except Exception as e:
-                    log.error("Camera error: %s", e)
-                    self._set_status("camera_error")
-                    self._stop.wait(5)
-                    continue
-            t0 = time.monotonic()
-            obs = self.sensor.read()
-            if obs is None:
-                errors += 1
-                if errors > 20:
-                    errors = 0
-                    self._reopen = True
-                self._stop.wait(0.2)
+                self._sync_phone()
+                self._stop.wait(0.5)
                 continue
-            errors = 0
+            t0 = time.monotonic()
+            self._sync_phone()
+            self._camera_share_step(t0)
+
+            obs = None
+            if not self.camera_wanted:
+                self._close_sensor()
+            else:
+                if (self.sensor is None or self._reopen) and t0 >= camera_retry_at:
+                    self._reopen = False
+                    self._close_sensor()
+                    try:
+                        self.sensor = FaceSensor(self.cfg["camera_index"])
+                        self._last_face = time.monotonic()
+                        self._set_status(self.state)
+                    except Exception as e:
+                        log.error("Camera error: %s", e)
+                        self._set_status("camera_error")
+                        camera_retry_at = t0 + 5
+                if self.sensor is not None:
+                    obs = self.sensor.read()
+                    if obs is None:
+                        errors += 1
+                        if errors > 20:
+                            errors = 0
+                            self._reopen = True
+                    else:
+                        errors = 0
             try:
                 self._process(obs, time.monotonic())
             except Exception:
                 log.exception("process failed")
-            period = 1.0 / max(1, self.cfg["camera_fps"])
+            if self.sensor is not None:
+                fps = self.cfg["camera_fps"]
+                if self.cfg["mouse_mode"] == MOUSE_EYES:
+                    fps = max(fps, 15)  # eye control needs a smoother stream
+                period = 1.0 / max(1, fps)
+            else:
+                period = 0.5
             self._stop.wait(max(0.0, period - (time.monotonic() - t0)))
         self._close_sensor()
+        self._stop_phone()
 
     def _close_sensor(self):
         if self.sensor:
             self.sensor.close()
             self.sensor = None
+        self._close_eye()
 
-    def _process(self, obs, now):
-        if obs.face:
-            self._last_face = now
-            self._face_streak += 1
-            self._last_obs, self._last_obs_at = obs, now
+    def _close_eye(self):
+        if self._eye:
+            self._eye.close()
+            self._eye = None
+        self._eye_feat = None
+
+    # ------------------------------------------------------------ phone
+    def _sync_phone(self):
+        """Starts / stops the Bluetooth watcher to match the settings."""
+        ph = self.cfg["phone"]
+        want = self.phone_wanted
+        if self._phone and (not want or self._phone.device_id != ph["device_id"]):
+            self._stop_phone()
+        if want and self._phone is None:
+            self._phone = PhoneWatcher(ph["device_id"], ph["check_seconds"], ph["away_checks"])
+            self._phone.start()
+
+    def _stop_phone(self):
+        if self._phone:
+            self._phone.stop()
+            self._phone = None
+
+    @property
+    def phone_near(self):
+        return self._phone.near if self._phone else None
+
+    # ------------------------------------------------------------ webcam sharing
+    def _camera_share_step(self, now):
+        if now - self._share_checked_at < 1.0 or self.cfg["camera_share"] == "never":
+            return
+        self._share_checked_at = now
+        if self._camshare is None:
+            try:
+                self._camshare = CameraShare()
+            except Exception:
+                log.exception("Webcam sharing unavailable")
+                self.cfg.data["camera_share"] = "never"
+                return
+            return
+        if self.camera_lent_to is not None:
+            key, name = self.camera_lent_to
+            if self._camshare.still_using(key):
+                self._lent_free_since = None
+            elif self._lent_free_since is None:
+                self._lent_free_since = now
+            elif now - self._lent_free_since >= 3:
+                log.info("%s released the webcam, taking it back", name)
+                self.camera_lent_to = None
+                self._camshare.new_requests()  # don't treat our own reopen as a request
+                self.popup(t("cam.back.title"), t("cam.back.body", app=name))
+            return
+        requests = self._camshare.new_requests()
+        if self.sensor is None:
+            return
+        for key, name in requests:
+            if self._asking or self._share_declined.get(key, 0) > now:
+                continue
+            if self.cfg["camera_share"] == "always":
+                self._lend_camera(key, name)
+            else:
+                self._asking = True
+                self.ui.ask(t("cam.ask.title", app=name), t("cam.ask.body", app=name),
+                            t("cam.ask.yes"), t("cam.ask.no"),
+                            lambda yes, k=key, n=name: self._answer_share(yes, k, n),
+                            winapi.pick_monitor(self.monitors, self.cfg["notification_monitor"]))
+            break
+
+    def _answer_share(self, yes, key, name):
+        self._asking = False
+        if yes:
+            self._lend_camera(key, name)
         else:
-            self._face_streak = 0
+            self._share_declined[key] = time.monotonic() + 120
+
+    def _lend_camera(self, key, name):
+        log.info("Handing the webcam to %s", name)
+        self.camera_lent_to = (key, name)
+        self._lent_free_since = None
+        self._reopen = True
+        self._set_status("camera_lent")
+        self.popup(t("cam.lent.title", app=name), t("cam.lent.body"), seconds=10)
+
+    # ------------------------------------------------------------ presence
+    def _process(self, obs, now):
+        """One tick. obs is the webcam observation, or None when the webcam is not in use."""
+        if obs is not None:
+            if obs.face:
+                self._last_face = now
+                self._face_streak += 1
+                self._last_obs, self._last_obs_at = obs, now
+            else:
+                self._face_streak = 0
+        phone = self.phone_near
+        if phone:
+            self._last_face = now
+        have_source = obs is not None or phone is not None
+
+        eyes = (obs is not None and self.cfg["mouse_mode"] == MOUSE_EYES
+                and self.state == PRESENT and not self.break_active)
+        if eyes:
+            self._eye_features(now)
         if self.calibrating:
             self._last_tick = now
             return
 
+        idle = winapi.idle_seconds()
         if self.state == PRESENT:
-            if now - self._last_face >= self.cfg["away_seconds"] \
-                    and winapi.idle_seconds() >= self.cfg["idle_guard_seconds"]:
+            if have_source:
+                gone = now - self._last_face >= self.cfg["away_seconds"] and idle >= self.cfg["idle_guard_seconds"]
+            else:  # no webcam and no phone: only keyboard / mouse inactivity is left
+                gone = idle >= self.cfg["idle_fallback_minutes"] * 60
+            if gone:
                 self.go_away(local=True)
             elif not self.break_active:
-                self._gaze_step(obs, now)
+                if eyes:
+                    self._eye_hotkey()
+                    self._eye_step(now)
+                elif obs is not None:
+                    self._gaze_step(obs, now)
                 self._break_step(now)
                 self._water_step(now)
                 self._work_step(now)
         else:
-            back_input = self.cfg["wake_on_input"] and winapi.idle_seconds() < 1.0
-            if self._face_streak >= self.cfg["back_frames"] or back_input:
+            back_input = self.cfg["wake_on_input"] and idle < 1.0
+            back_phone = phone is True and self._phone_at_away is not True
+            if self._face_streak >= self.cfg["back_frames"] or back_input or back_phone:
                 self.come_back(local=True)
             elif self.cfg["lock_after_away_minutes"] > 0 and not self._locked \
                     and now - self._away_since >= self.cfg["lock_after_away_minutes"] * 60:
@@ -197,6 +386,7 @@ class Controller:
             log.info("AWAY (local=%s)", local)
             self.state = AWAY
             self._away_since = time.monotonic()
+            self._phone_at_away = self.phone_near
             self._locked = False
             if self.cfg["pause_media"]:
                 self.media.pause()
@@ -309,7 +499,7 @@ class Controller:
 
     # ------------------------------------------------------------ gaze -> cursor
     def _gaze_step(self, obs, now):
-        if not (self.cfg["gaze_follow"] and self.sensor and self.sensor.supports_gaze and self.gaze.ready):
+        if not (self.cfg["mouse_mode"] == MOUSE_MONITOR and self.sensor and self.sensor.supports_gaze and self.gaze.ready):
             return
         if obs.face:
             target = self.gaze.update(obs.yaw, obs.pitch, now)
@@ -358,6 +548,128 @@ class Controller:
             px, py = mon.center
         winapi.set_cursor(px, py)
         log.info("Gaze -> %s", target)
+
+    # ------------------------------------------------------------ eyes -> cursor
+    def _eye_features(self, now):
+        if self._eye is None:
+            if self._eye_failed or not eyetrack.available():
+                self._eye_failed = True
+                return
+            try:
+                self._eye = eyetrack.EyeTracker()
+                self._eye_filter.reset()
+                log.info("Eye tracker ready")
+            except Exception:
+                log.exception("Eye tracker unavailable")
+                self._eye_failed = True
+                return
+        frame = self.sensor.last_frame if self.sensor else None
+        if frame is None:
+            return
+        try:
+            self._eye_feat = self._eye.features(frame, now)
+            self._eye_feat_at = now
+        except Exception:
+            log.exception("Eye tracking failed")
+            self._eye_feat = None
+
+    def _eye_hotkey(self):
+        down = winapi.keys_down(winapi.VK_CONTROL, winapi.VK_MENU, 0x45)  # Ctrl+Alt+E
+        if down and not self._hotkey_down:
+            self.eye_active = not self.eye_active
+            self._eye_filter.reset()
+            self.popup(t("eyes.on") if self.eye_active else t("eyes.off"), t("eyes.hotkey"), seconds=3)
+        self._hotkey_down = down
+
+    def _eye_step(self, now):
+        if not (self.eye_active and self.eye_mapper.ok) or self._eye_feat is None:
+            return
+        x, y = self._eye_filter(self.eye_mapper.predict(self._eye_feat), now)
+        x, y = self._clamp_to_monitors(x, y)
+        cur = winapi.get_cursor()
+        # the user moved the mouse themselves -> step aside for a moment
+        if self._eye_prev is not None and cur != self._eye_prev and cur != self._eye_set:
+            self._eye_hold_until = now + self.cfg["eye_pause_after_mouse_seconds"]
+        self._eye_prev = cur
+        if now < self._eye_hold_until or winapi.mouse_button_down():
+            return
+        if math.hypot(x - cur[0], y - cur[1]) < self.cfg["eye_deadzone_px"]:
+            return
+        self._eye_set = (int(x), int(y))
+        winapi.set_cursor(*self._eye_set)
+        self._eye_prev = winapi.get_cursor()
+
+    def _clamp_to_monitors(self, x, y):
+        best, best_d = (x, y), None
+        for m in self.monitors:
+            l, t_, r, b = m.rect
+            cx, cy = min(max(x, l), r - 1), min(max(y, t_), b - 1)
+            d = (cx - x) ** 2 + (cy - y) ** 2
+            if best_d is None or d < best_d:
+                best, best_d = (cx, cy), d
+        return best
+
+    def eye_calibration_points(self):
+        self.monitors = winapi.list_monitors()
+        points = []
+        for m in self.monitors:
+            l, t_, r, b = m.rect
+            w, h = r - l, b - t_
+            for fx, fy in ((0.5, 0.5), (0.1, 0.1), (0.9, 0.1), (0.9, 0.9), (0.1, 0.9)):
+                points.append((m, int(l + fx * w), int(t_ + fy * h)))
+        return points
+
+    def start_eye_calibration(self):
+        if not self.uses_camera:
+            self.popup(t("cal.title"), t("cal.no_camera"))
+            return
+        if not eyetrack.available():
+            self.popup(t("cal.title"), t("eyes.unavailable"))
+            return
+        if self.cfg["mouse_mode"] != MOUSE_EYES:
+            self.cfg.set("mouse_mode", MOUSE_EYES)
+        self._eye_failed = False
+        threading.Thread(target=self._eye_calibration_when_ready, daemon=True).start()
+
+    def _eye_calibration_when_ready(self):
+        # switching to eye mode may first have to open the webcam and load the model
+        end = time.monotonic() + 10
+        while time.monotonic() < end and not (self._eye is not None and self.sensor is not None):
+            if self._eye_failed:
+                break
+            time.sleep(0.2)
+        if self._eye is None or self.sensor is None:
+            self.popup(t("cal.title"), t("cal.not_ready"))
+            return
+        self.calibrating = True
+
+        def sample():
+            if self._eye_feat is not None and time.monotonic() - self._eye_feat_at < 0.3:
+                return self._eye_feat.tolist()
+            return None
+
+        self.ui.calibrate_points(self.eye_calibration_points(), sample, self._eye_calibration_done)
+
+    def _eye_calibration_done(self, samples):
+        self.calibrating = False
+        self._last_face = time.monotonic()
+        if samples is None:
+            self.popup(t("cal.cancelled"), "")
+            return
+        if len(samples) < 30:
+            self.popup(t("cal.failed"), t("cal.failed_body"))
+            return
+        feats = [s[0] for s in samples]
+        pts = [s[1] for s in samples]
+        mapper, err = eyetrack.GazeMapper.fit(feats, pts)
+        data = mapper.to_dict()
+        data["error_px"] = round(err)
+        self.cfg.set("eye_calibration", data)
+        self.eye_mapper = mapper
+        self._eye_filter.reset()
+        self.eye_active = True
+        log.info("Eye calibration: %d samples, median error %d px", len(samples), err)
+        self.popup(t("cal.done"), t("eyes.done_body", px=round(err)), seconds=10)
 
     # ------------------------------------------------------------ calibration
     def calibration_targets(self):

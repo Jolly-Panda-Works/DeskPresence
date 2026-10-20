@@ -45,6 +45,8 @@ class FaceSensor:
             raise RuntimeError(f"Cannot open camera {camera_index}")
         self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
         self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
+        self.last_frame = None
+        self.last_box = None
         model = _model_path()
         self.yunet = None
         self.haar = None
@@ -67,17 +69,21 @@ class FaceSensor:
         if w != self.WIDTH:
             frame = cv2.resize(frame, (self.WIDTH, int(h * self.WIDTH / w)))
             h, w = frame.shape[:2]
+        self.last_frame = frame  # used by the eye tracker and the settings preview
 
         if self.haar is not None:
             gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
             faces = self.haar.detectMultiScale(gray, 1.2, 5, minSize=(60, 60))
+            self.last_box = tuple(int(v) for v in faces[0]) if len(faces) else None
             return Observation(face=len(faces) > 0, faces=len(faces))
 
         self.yunet.setInputSize((w, h))
         _, faces = self.yunet.detect(frame)
         if faces is None or len(faces) == 0:
+            self.last_box = None
             return Observation(face=False)
         f = max(faces, key=lambda r: r[2] * r[3])  # largest face = the user
+        self.last_box = tuple(int(v) for v in f[:4])
         rex, rey, lex, ley, nx, ny = f[4:10]
         eye_dist = max(1.0, abs(lex - rex))
         mid_x, mid_y = (rex + lex) / 2, (rey + ley) / 2
