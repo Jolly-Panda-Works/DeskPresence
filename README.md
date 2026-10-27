@@ -21,12 +21,16 @@
 | | |
 |---|---|
 | **Leave the desk** | The webcam no longer sees you, or your phone leaves Bluetooth range (and the keyboard/mouse is idle) → music and videos pause and all monitors turn off. The PC keeps running. |
+| **Webcam only now and then** | By default the webcam is off. It opens for a quick look every 3 minutes, and not at all while you use the keyboard or mouse. While you are away it takes a short look every 20 seconds (the keyboard and mouse work at once too). *Always on* is still there for the head and eye cursor features. |
+| **Turning your head is fine** | You count as here when your **body** is seen, not only your face: looking at your phone, turning to someone or sitting sideways does not turn the monitors off. |
+| **Only you** | Optional: teach DeskPresence your face (Settings → Presence → *Only me*). Then only your face turns the monitors back on. If someone else touches the keyboard or mouse, the screens go dark again after a few seconds. |
 | **Come back** | Monitors turn back on and the **music** DeskPresence paused plays again. Videos stay paused. |
 | **Mouse follows your gaze** | *Jump to monitor*: turn your head and the cursor jumps to that monitor. *Follow my eyes*: the cursor moves to where you look (iris tracking, toggle with Ctrl+Alt+E). |
 | **Phone instead of webcam** | Use your paired phone over Bluetooth, with or without the webcam. No app needed on the phone. |
 | **Shares the webcam** | When a video app starts (Zoom, Teams, Camera, OBS, or any app that used the webcam before), DeskPresence asks and hands the webcam over, then takes it back when that app is done. *Release webcam* in the widget frees it by hand. |
 | **Settings window** | Every option, a live webcam preview, phone range test, laptop pairing with automatic discovery and a connection test. |
 | **Water reminder** | After every hour at the desk: “Time to drink water!” with *I drank ✓* / *In 10 minutes*. The **I drank** button in the widget, the tray menu and Settings restarts the timer. |
+| **Desk exercises** | Every hour at the desk the exercise window opens by itself: neck stretch, shoulder shrugs, overhead reach, side bends, seated twists and chair squats. The webcam watches your body, **counts every repetition**, cheers you on and tells you when the form is off (*“Straighten your arms”*, *“Lift both shoulders together”*, *“Too fast”*). Also from the tray menu or Settings → Health. |
 | **Timer widget** | A small always-on-top window: status, time to the next water reminder and break, time at the desk, eye-control and webcam buttons. Drag it anywhere. |
 | **Fair timers** | Timers only count time at the desk: they pause while you are away and continue when you are back. Away 10+ minutes counts as a break and restarts the break / stand-up timers. |
 | **Phone calls** | With Windows Phone Link, an incoming call pauses music and video; music resumes after the call. |
@@ -98,12 +102,18 @@ Everything is in the Settings window. The same values live in `%APPDATA%\DeskPre
 | `pause_on_call` | true | Pause media during Phone Link calls |
 | `widget` | on | The floating timer widget (`enabled`, position) |
 | `eye_deadzone_px` | 90 | Eye mode ignores gaze changes smaller than this |
-| `away_seconds` | 10 | Seconds without a face before you count as away |
+| `camera_mode` | `interval` | `interval` (a look every few minutes, webcam off in between) or `always` |
+| `check_every_minutes` | 3 | Interval mode: minutes between looks (skipped while you type) |
+| `away_check_seconds` | 20 | Interval mode, while away: seconds between short looks |
+| `presence_by` | `body` | `body` (a person from any side) or `face` |
+| `owner_only` | false | Only the owner's face turns the PC back on (needs *Teach my face*) |
+| `away_seconds` | 10 | Seconds without seeing you before you count as away |
 | `idle_guard_seconds` | 20 | Never turn anything off if the keyboard/mouse was used this recently |
 | `wake_on_input` | true | Touching the keyboard/mouse also means you are back |
 | `camera_index` | 0 | Which webcam to use |
 | `water_reminder_minutes` | 60 | `0` = off |
 | `forced_break` | 90 / 10 | `work_minutes`, `break_minutes`, `enabled`, `allow_skip` |
+| `exercise` | 60 min | `enabled`, `every_minutes`, `auto_open` (open by itself, else ask), `reps` (8), `moves` (which exercises) |
 | `break_reminder_minutes` | 50 | A gentle “stand up” popup (`0` = off) |
 | `lock_after_away_minutes` | 0 | Lock Windows after being away this long (`0` = never) |
 | `gaze_stable_seconds` | 0.6 | How long you must look at a monitor before the cursor moves |
@@ -140,8 +150,10 @@ Every push builds DeskPresence on `windows-latest` after the tests pass, self-te
 ```
 deskpresence/
   controller.py     presence state machine, breaks, water, gaze -> cursor, laptop sync
-  vision.py         webcam + YuNet face detector + head-pose estimate
+  vision.py         webcam + YuNet face detector + head-pose estimate, person detector, owner recognition
   eyetrack.py       MediaPipe iris tracking -> cursor (calibrated regression)
+  exercise.py       MediaPipe body landmarks -> exercise repetitions and form corrections
+  exercise_ui.py    the exercise window (webcam picture, count, feedback)
   phone.py          Bluetooth phone presence
   camshare.py       notices other apps that want the webcam
   calls.py          phone calls through Windows Phone Link

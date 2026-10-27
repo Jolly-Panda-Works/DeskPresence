@@ -84,6 +84,7 @@ class UI:
         self._break_status_labels = []
         self._skip_armed_at = 0.0
         self._about = None
+        self._exercise = None
         self._logo = None
         ico = asset_path("icon.ico")
         if ico:
@@ -405,6 +406,25 @@ class UI:
         sw, sh = win.winfo_screenwidth(), win.winfo_screenheight()
         win.geometry(f"{w}x{h}+{(sw - w) // 2}+{(sh - h) // 2}")
         win.focus_force()
+
+    # ------------------------------------------------------------ desk exercises
+    def exercise_show(self, ctrl, monitor):
+        self.call(self._exercise_show, ctrl, monitor)
+
+    def exercise_hide(self):
+        self.call(self._exercise_hide)
+
+    def _exercise_show(self, ctrl, monitor):
+        from .exercise_ui import ExerciseWindow
+        if self._exercise is not None and self._exercise.alive:
+            self._exercise.win.lift()
+            return
+        self._exercise = ExerciseWindow(self.root, ctrl, monitor)
+
+    def _exercise_hide(self):
+        if self._exercise is not None:
+            self._exercise.close()
+            self._exercise = None
 
     # ------------------------------------------------------------ eye calibration
     def calibrate_points(self, points, sample_fn, on_done):

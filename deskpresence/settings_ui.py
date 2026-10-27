@@ -8,7 +8,7 @@ import webbrowser
 import customtkinter as ctk
 from PIL import Image, ImageDraw
 
-from . import APP_AUTHOR, APP_NAME, APP_REPO, APP_VERSION, APP_WEBSITE, network, phone, winapi
+from . import APP_AUTHOR, APP_NAME, APP_REPO, APP_VERSION, APP_WEBSITE, exercise, network, phone, winapi
 from .i18n import is_rtl, set_language, t
 from .media import MODES
 from .tray import autostart_enabled, set_autostart
@@ -144,9 +144,16 @@ class SettingsWindow:
             self.win.focus_force()
 
     def close(self):
+        self.ctrl.camera_hold = False
         if self.win is not None:
             self.win.destroy()
             self.win = None
+
+    def _teach_owner(self):
+        self.ctrl.teach_owner()
+
+    def _forget_owner(self):
+        self.ctrl.forget_owner()
 
     @property
     def alive(self):
@@ -341,6 +348,27 @@ class SettingsWindow:
         self._choice(c, t("set.share"), "camera_share",
                      [("ask", t("set.share_ask")), ("always", t("set.share_always")), ("never", t("set.share_never"))],
                      hint=t("set.share_hint"))
+        self._choice(c, t("set.camera_mode"), "camera_mode",
+                     [("interval", t("set.cm_interval")), ("always", t("set.cm_always"))],
+                     hint=t("set.camera_mode_hint"))
+        self._slider(c, t("set.check_every"), "check_every_minutes", 1, 15, 1, unit=t("set.min"))
+        self._slider(c, t("set.away_check"), "away_check_seconds", 5, 120, 5, unit=t("set.sec"),
+                     hint=t("set.away_check_hint"))
+        self._choice(c, t("set.presence_by"), "presence_by",
+                     [("body", t("set.by_body")), ("face", t("set.by_face"))], hint=t("set.presence_by_hint"))
+        self._end(c)
+
+        c = self._card(t("set.owner"), t("set.owner_hint"))
+        self._switch(c, t("set.owner_only"), "owner_only")
+        self._info(c, t("set.owner_face"), "owner_state")
+
+        def buttons(p):
+            box = ctk.CTkFrame(p, fg_color="transparent")
+            side = "left" if self.rtl else "right"
+            self._primary(box, t("set.owner_teach"), self._teach_owner, width=150).pack(side=side, padx=8)
+            self._ghost(box, t("set.owner_forget"), self._forget_owner).pack(side=side)
+            return box
+        self._row(c, "", buttons, hint=t("set.owner_teach_hint"))
         self._end(c)
 
         c = self._card(t("set.timing"))
@@ -417,6 +445,17 @@ class SettingsWindow:
         c = self._card(t("set.sec.health"))
         self._slider(c, t("set.water"), "water_reminder_minutes", 0, 180, 5, unit=t("set.min"))
         self._slider(c, t("set.standup"), "break_reminder_minutes", 0, 120, 5, unit=t("set.min"))
+        self._end(c)
+
+        c = self._card(t("set.exercise"), t("set.exercise_hint"))
+        self._row(c, "", lambda p: self._primary(p, t("set.ex_start"), self.ctrl.start_exercise, width=150))
+        self._info(c, "🤸 " + t("set.exercise_left"), "t_exercise")
+        self._switch(c, t("set.ex_enabled"), "exercise.enabled")
+        self._slider(c, t("set.ex_every"), "exercise.every_minutes", 15, 180, 15, unit=t("set.min"))
+        self._switch(c, t("set.ex_auto"), "exercise.auto_open", hint=t("set.ex_auto_hint"))
+        self._slider(c, t("set.ex_reps"), "exercise.reps", 3, 20, 1)
+        for key in exercise.ORDER:
+            self._switch(c, t(f"ex.name.{key}"), f"exercise.moves.{key}")
         self._end(c)
         c = self._card(t("set.forced"), t("set.forced_hint"))
         self._switch(c, t("set.forced_on"), "forced_break.enabled")
@@ -677,8 +716,20 @@ class SettingsWindow:
                 self._set_live("camera_state", t("status.camera_busy"), ORANGE)
             elif ctrl.sensor is not None:
                 self._set_live("camera_state", t("set.cam_on"), OK_GREEN)
+            elif ctrl.next_check_seconds() is not None:
+                self._set_live("camera_state", t("set.cam_waiting", s=int(ctrl.next_check_seconds())), MUTED)
             else:
                 self._set_live("camera_state", t("set.cam_off"), MUTED)
+        if "owner_state" in self.live:
+            n = len(self.cfg["owner_faces"])
+            if ctrl._enroll is not None:
+                self._set_live("owner_state", t("set.owner_learning"), ORANGE)
+            elif n:
+                self._set_live("owner_state", t("set.owner_saved", n=n), OK_GREEN)
+            else:
+                self._set_live("owner_state", t("set.owner_none"), MUTED)
+        # the preview needs frames, so the webcam stays on while it is shown (even in interval mode)
+        ctrl.camera_hold = self.preview_lbl is not None and self.preview_lbl.winfo_exists()
         if self.preview_lbl is not None and self.preview_lbl.winfo_exists():
             sensor = ctrl.sensor
             frame = sensor.last_frame if sensor is not None else None
@@ -710,6 +761,8 @@ class SettingsWindow:
             else:
                 self._set_live("t_break", mins(tm["break_left"]))
             self._set_live("t_sit", mins(tm["sitting"]))
+            if "t_exercise" in self.live:
+                self._set_live("t_exercise", mins(tm["exercise_left"]))
         if "link_state" in self.live:
             if not self.cfg["network_enabled"]:
                 self._set_live("link_state", t("set.link_disabled"), MUTED)

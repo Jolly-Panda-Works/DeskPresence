@@ -100,6 +100,7 @@ class Tray:
                 I(tr("menu.calibrate"), lambda: ctrl.start_calibration()),
                 I(tr("set.eyes_cal"), lambda: ctrl.start_eye_calibration()),
             ), visible=cam),
+            I(tr("menu.exercise"), lambda: ctrl.start_exercise(), visible=cam),
             I(tr("menu.break_now"), lambda: ctrl.start_break(),
               visible=lambda _: ctrl.uses_camera and not ctrl.break_active),
             I(tr("menu.break_end"), lambda: ctrl.end_break(skipped=True),

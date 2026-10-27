@@ -34,8 +34,18 @@ DEFAULTS = {
     "idle_fallback_minutes": 5,
     "camera_index": 0,
     "camera_fps": 8,
-    "away_seconds": 10,          # no face for this long -> away
-    "back_frames": 3,            # consecutive frames with a face -> back
+    # "interval" = the webcam is off and only opens every check_every_minutes for a quick look;
+    # "always" = the webcam stays on (needed for the cursor to follow your head or eyes)
+    "camera_mode": "interval",
+    "check_every_minutes": 3,
+    "away_check_seconds": 20,    # interval mode, while away: a short look this often
+    # what counts as you: "body" = a person from any side (turning your head is fine), "face" = a face
+    "presence_by": "body",
+    # only the owner's face turns the PC back on (teach it in Settings -> Presence)
+    "owner_only": False,
+    "owner_faces": [],           # SFace features of the owner, saved by "Teach my face"
+    "away_seconds": 10,          # nobody seen for this long -> away
+    "back_frames": 3,            # consecutive frames with you in them -> back
     "idle_guard_seconds": 20,    # never go "away" if keyboard/mouse was used this recently
     "wake_on_input": True,       # touching the keyboard/mouse while away counts as "back"
     # before going away: a countdown on every monitor while the screens fade to black
@@ -53,6 +63,15 @@ DEFAULTS = {
     "lock_after_away_minutes": 0,     # 0 = never lock
     "break_reminder_minutes": 50,     # 0 = off
     "water_reminder_minutes": 60,     # 0 = off
+    # desk exercises: the webcam watches, counts the repetitions and corrects the form
+    "exercise": {
+        "enabled": True,
+        "every_minutes": 60,       # of time at the desk; 0 = only when you start them yourself
+        "auto_open": True,         # open the exercise window by itself (False = ask first)
+        "reps": 8,                 # repetitions of each exercise
+        "moves": {"neck_tilt": True, "shoulder_shrug": True, "arm_raise": True,
+                  "side_bend": True, "torso_twist": True, "chair_squat": True},
+    },
     # timers only count time at the desk; an absence this long resets the break / stand-up timers
     "timer_reset_away_minutes": 10,
 

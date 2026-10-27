@@ -56,8 +56,16 @@ def self_test():
                        phone, settings_ui, tray, widget)
         calls.phone_link_audio_active()
         import pycaw.pycaw  # noqa: F401
-        from .vision import _model_path
+        import cv2 as _cv2
+        from .vision import IDENTITY_MODEL, PERSON_MODEL, PersonDetector, _model_path
         assert _model_path(), "YuNet model missing"
+        assert _model_path(PERSON_MODEL), "person detector model missing"
+        PersonDetector(_model_path(PERSON_MODEL)).close()
+        assert _model_path(IDENTITY_MODEL), "face recognition model missing"
+        _cv2.FaceRecognizerSF.create(_model_path(IDENTITY_MODEL), "")
+        from . import exercise, exercise_ui  # noqa: F401
+        assert exercise.available(), "body-tracking model missing"
+        exercise.PoseTracker().close()
         assert eyetrack.available(), "eye-tracking model or mediapipe missing"
         eyetrack.EyeTracker().close()
         assert media.HAVE_SMTC and phone.HAVE_BT and notifications.HAVE_LISTENER, "WinRT modules missing"

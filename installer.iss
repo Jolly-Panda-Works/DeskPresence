@@ -4,6 +4,13 @@
 #ifndef MyAppVersion
   #define MyAppVersion "0.0.0-unversioned"
 #endif
+; Windows file versions are numbers only: 1.8.0-dev.33 -> 1.8.0 for VersionInfoVersion
+#define DashPos Pos("-", MyAppVersion)
+#if DashPos > 0
+  #define MyFileVersion Copy(MyAppVersion, 1, DashPos - 1)
+#else
+  #define MyFileVersion MyAppVersion
+#endif
 #define MyAppName "DeskPresence"
 #define MyAppExe "DeskPresence.exe"
 
@@ -20,7 +27,7 @@ AppPublisherURL=https://www.useffarahmand.com/
 AppSupportURL=https://github.com/Jolly-Panda-Works/DeskPresence/issues
 AppUpdatesURL=https://github.com/Jolly-Panda-Works/DeskPresence/releases
 AppCopyright=Copyright (c) 2026 Usef Farahmand
-VersionInfoVersion={#MyAppVersion}
+VersionInfoVersion={#MyFileVersion}
 DefaultDirName={autopf}\{#MyAppName}
 DefaultGroupName={#MyAppName}
 ; ask where to install
