@@ -63,6 +63,15 @@ DEFAULTS = {
     "lock_after_away_minutes": 0,     # 0 = never lock
     "break_reminder_minutes": 50,     # 0 = off
     "water_reminder_minutes": 60,     # 0 = off
+    # desk exercises: the webcam watches, counts the repetitions and corrects the form
+    "exercise": {
+        "enabled": True,
+        "every_minutes": 60,       # of time at the desk; 0 = only when you start them yourself
+        "auto_open": True,         # open the exercise window by itself (False = ask first)
+        "reps": 8,                 # repetitions of each exercise
+        "moves": {"neck_tilt": True, "shoulder_shrug": True, "arm_raise": True,
+                  "side_bend": True, "torso_twist": True, "chair_squat": True},
+    },
     # timers only count time at the desk; an absence this long resets the break / stand-up timers
     "timer_reset_away_minutes": 10,
 

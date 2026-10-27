@@ -7,6 +7,7 @@ Release builds are published automatically from `main`. See the
 
 - The webcam is no longer always on: it opens for a quick look every few minutes (3 by default), and not at all while you use the keyboard or mouse. While you are away it takes a short look every 20 seconds. *Always on* is still available (the head and eye cursor features need it). Settings → Presence → Webcam.
 - Presence no longer needs your face: a person detector sees you from the side or from behind, so turning your head away does not turn the monitors off. *You are here when: your face is seen* brings back the old rule.
+- Desk exercises: every hour at the desk (adjustable) the exercise window opens by itself. The webcam counts each repetition of six exercises (neck stretch, shoulder shrugs, overhead reach, side bends, seated twists, chair squats), cheers you on and corrects the form. Settings → Health, or the tray menu.
 - *Only me*: teach DeskPresence your face, and only you turn the monitors back on. Someone else at the keyboard gets dark screens again after a few seconds.
 
 ## 1.7

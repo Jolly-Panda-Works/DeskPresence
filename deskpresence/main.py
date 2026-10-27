@@ -63,6 +63,9 @@ def self_test():
         PersonDetector(_model_path(PERSON_MODEL)).close()
         assert _model_path(IDENTITY_MODEL), "face recognition model missing"
         _cv2.FaceRecognizerSF.create(_model_path(IDENTITY_MODEL), "")
+        from . import exercise, exercise_ui  # noqa: F401
+        assert exercise.available(), "body-tracking model missing"
+        exercise.PoseTracker().close()
         assert eyetrack.available(), "eye-tracking model or mediapipe missing"
         eyetrack.EyeTracker().close()
         assert media.HAVE_SMTC and phone.HAVE_BT and notifications.HAVE_LISTENER, "WinRT modules missing"

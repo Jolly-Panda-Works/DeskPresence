@@ -5,7 +5,7 @@ import math
 import threading
 import time
 
-from . import camshare, eyetrack, winapi
+from . import camshare, exercise, eyetrack, winapi
 from .i18n import t
 from .media import MediaController
 from .network import Link
@@ -80,6 +80,12 @@ class Controller:
         self._owner_streak = 0
         self._input_wake_at = None             # keyboard/mouse used while away: who is it?
         self._enroll = None                    # "Teach my face" in progress
+        # desk exercises watched by the webcam
+        self.exercise = None                   # exercise.Session while the exercise window is open
+        self.exercise_view = None              # latest {"snap", "frame", "lm"} for the window
+        self._pose = None
+        self._exercise_finished = False
+        self._exercise_asking = False
         self._lock = threading.RLock()
         self._stop = threading.Event()
         self._reopen = False
@@ -99,6 +105,7 @@ class Controller:
         self.water_elapsed = 0.0
         self.work_elapsed = 0.0
         self.sit_elapsed = 0.0
+        self.exercise_elapsed = 0.0
         self._water_asking = False
         self.break_active = False
         self._break_left = 0.0
@@ -201,7 +208,7 @@ class Controller:
     def camera_wanted(self):
         if not self.uses_camera or self.paused or self.camera_lent_to is not None:
             return False
-        if self.camera_hold or self._enroll is not None:
+        if self.camera_hold or self._enroll is not None or self.exercise is not None:
             return True
         if self.interval_mode:
             return self._check_until is not None
@@ -278,13 +285,17 @@ class Controller:
             try:
                 if self._enroll is not None:
                     self._enroll_step(obs, time.monotonic())
+                if self.exercise is not None:
+                    self._exercise_step(time.monotonic())
+                elif self._pose is not None:
+                    self._close_pose()
                 self._process(obs, time.monotonic())
             except Exception:
                 log.exception("process failed")
             if self.sensor is not None:
                 fps = self.cfg["camera_fps"]
-                if self.cfg["mouse_mode"] == MOUSE_EYES and not self.interval_mode:
-                    fps = max(fps, 15)  # eye control needs a smoother stream
+                if (self.cfg["mouse_mode"] == MOUSE_EYES and not self.interval_mode) or self.exercise is not None:
+                    fps = max(fps, 15)  # eye control and exercise counting need a smoother stream
                 period = 1.0 / max(1, fps)
             else:
                 period = 0.5
@@ -297,6 +308,7 @@ class Controller:
             self.sensor.close()
             self.sensor = None
         self._close_eye()
+        self._close_pose()
 
     def _close_eye(self):
         if self._eye:
@@ -452,6 +464,10 @@ class Controller:
             if seen and self.state == PRESENT and not self.break_active and self._check_until is not None:
                 self._end_check(now)  # you are here: the webcam goes off until the next look
         # interval mode, between two looks: the last look saw you, so you are still here
+        if self.exercise is not None:  # exercising: you are here, standing up for a squat included
+            self._last_face = self._last_tick = now
+            self._countdown_step(None)
+            return
         between = (self.interval_mode and obs is None and self._check_until is None
                    and self.camera_lent_to is None)
         if between and self.state == PRESENT:
@@ -492,6 +508,7 @@ class Controller:
                     self._gaze_step(obs, now)
                 self._break_step(now)
                 self._water_step(now)
+                self._exercise_due(now)
                 self._work_step(now)
         else:
             back_input = self.cfg["wake_on_input"] and idle < 1.0
@@ -693,7 +710,7 @@ class Controller:
         log.info("Resumed after %d s of sleep: timers restart", gap)
         if self.break_active:
             self.end_break(skipped=True)
-        self.water_elapsed = self.work_elapsed = self.sit_elapsed = 0.0
+        self.water_elapsed = self.work_elapsed = self.sit_elapsed = self.exercise_elapsed = 0.0
         self._break_reminded = False
         self._water_asking = False
         self._last_face = self._last_tick = time.monotonic()
@@ -708,6 +725,7 @@ class Controller:
         self.water_elapsed += dt
         self.work_elapsed += dt
         self.sit_elapsed += dt
+        self.exercise_elapsed += dt
 
     def _water_step(self, now):
         mins = self.cfg["water_reminder_minutes"]
@@ -748,8 +766,11 @@ class Controller:
         """Seconds left / elapsed for the widget and the settings window (None = turned off)."""
         fb = self.cfg["forced_break"]
         water = self.cfg["water_reminder_minutes"]
+        ex = self.cfg["exercise"]
         return {
             "water_left": max(0.0, water * 60 - self.water_elapsed) if water > 0 else None,
+            "exercise_left": (max(0.0, ex["every_minutes"] * 60 - self.exercise_elapsed)
+                              if ex["enabled"] and ex["every_minutes"] > 0 else None),
             "break_left": max(0.0, fb["work_minutes"] * 60 - self.work_elapsed) if fb["enabled"] else None,
             "sitting": self.sit_elapsed,
             "break_active": self.break_active,
@@ -812,6 +833,104 @@ class Controller:
         if mins > 0 and not self._break_reminded and self.sit_elapsed >= mins * 60:
             self._break_reminded = True
             self.popup(t("remind.title"), t("remind.body", mins=mins))
+
+    # ------------------------------------------------------------ desk exercises
+    def _exercise_due(self, now):
+        ex = self.cfg["exercise"]
+        if (not ex["enabled"] or ex["every_minutes"] <= 0 or self._exercise_asking or self.exercise is not None
+                or self.exercise_elapsed < ex["every_minutes"] * 60):
+            return
+        if ex["auto_open"]:
+            log.info("Exercise time: opening the exercise window")
+            self.start_exercise()
+            return
+        self._exercise_asking = True
+        winapi.beep()
+        self.ui.ask(t("ex.ask.title"), t("ex.ask.body"), t("ex.ask.yes"), t("ex.ask.no"), self._exercise_answer,
+                    winapi.pick_monitor(self.monitors, self.cfg["notification_monitor"]), timeout=90)
+
+    def _exercise_answer(self, yes):
+        self._exercise_asking = False
+        if yes:
+            self.start_exercise()
+        else:
+            self._snooze_exercise()
+
+    def _snooze_exercise(self):
+        """Ask again in 10 minutes at the desk."""
+        every = self.cfg["exercise"]["every_minutes"] * 60
+        self.exercise_elapsed = max(0.0, every - 10 * 60)
+
+    def start_exercise(self, keys=None):
+        """Opens the exercise window; the webcam counts the repetitions."""
+        if self.exercise is not None:
+            return
+        if not self.uses_camera or self.paused:
+            self.popup(t("ex.title"), t("cal.no_camera"))
+            return
+        if not exercise.available():
+            self.popup(t("ex.title"), t("ex.unavailable"))
+            return
+        ex = self.cfg["exercise"]
+        if keys is None:
+            keys = [k for k in exercise.ORDER if ex["moves"].get(k, True)]
+        self.exercise = exercise.Session(keys, ex["reps"])
+        self.exercise_view = {"snap": self.exercise.snapshot(), "frame": None, "lm": None}
+        self._exercise_finished = False
+        self.exercise_elapsed = 0.0
+        if self.camera_lent_to is not None:
+            self.take_camera_back()
+        log.info("Exercises started: %s", ", ".join(self.exercise.keys))
+        self.ui.exercise_show(self, winapi.pick_monitor(winapi.list_monitors(), self.cfg["notification_monitor"]))
+        self._set_status(self.status)
+
+    def stop_exercise(self, later=False):
+        """The window was closed (later=True: remind again in 10 minutes)."""
+        if self.exercise is None:
+            return
+        log.info("Exercises %s", "finished" if self.exercise.done else "stopped")
+        self.exercise = None
+        if later:
+            self._snooze_exercise()
+        self._last_face = self._last_tick = time.monotonic()
+        self._set_status(self.status)
+
+    def skip_exercise(self):
+        if self.exercise is not None:
+            self.exercise.skip(time.monotonic())
+
+    def _exercise_step(self, now):
+        """Camera thread: body landmarks of the newest frame -> the exercise session."""
+        session = self.exercise
+        frame = self.sensor.last_frame if self.sensor is not None else None
+        if session is None or frame is None:
+            return
+        if self._pose is None:
+            try:
+                self._pose = exercise.PoseTracker()
+            except Exception:
+                log.exception("Body tracking unavailable")
+                self.popup(t("ex.title"), t("ex.unavailable"))
+                self.exercise = None
+                self.ui.exercise_hide()
+                return
+        try:
+            lm = self._pose.landmarks(frame, now)
+        except Exception:
+            log.exception("Body tracking failed")
+            lm = None
+        snap = session.update(lm, now)
+        self.exercise_view = {"snap": snap, "frame": frame, "lm": lm}
+        if snap["done"] and not self._exercise_finished:
+            self._exercise_finished = True
+            self.sit_elapsed = 0.0  # you stood up and moved: the stand-up reminder starts over
+            self._break_reminded = False
+            winapi.beep()
+
+    def _close_pose(self):
+        if self._pose is not None:
+            self._pose.close()
+            self._pose = None
 
     # ------------------------------------------------------------ gaze -> cursor
     def _gaze_step(self, obs, now):

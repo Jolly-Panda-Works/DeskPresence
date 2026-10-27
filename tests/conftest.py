@@ -47,6 +47,12 @@ class FakeUI:
     def away_countdown_hide(self):
         self.log.append(("countdown_hide",))
 
+    def exercise_show(self, ctrl, monitor):
+        self.log.append(("exercise",))
+
+    def exercise_hide(self):
+        self.log.append(("exercise_hide",))
+
     def ask(self, title, body, yes, no, callback, monitor, timeout=45):
         self.log.append(("popup", title))
         self.pending = callback

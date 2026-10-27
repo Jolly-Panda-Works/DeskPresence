@@ -30,6 +30,7 @@
 | **Shares the webcam** | When a video app starts (Zoom, Teams, Camera, OBS, or any app that used the webcam before), DeskPresence asks and hands the webcam over, then takes it back when that app is done. *Release webcam* in the widget frees it by hand. |
 | **Settings window** | Every option, a live webcam preview, phone range test, laptop pairing with automatic discovery and a connection test. |
 | **Water reminder** | After every hour at the desk: “Time to drink water!” with *I drank ✓* / *In 10 minutes*. The **I drank** button in the widget, the tray menu and Settings restarts the timer. |
+| **Desk exercises** | Every hour at the desk the exercise window opens by itself: neck stretch, shoulder shrugs, overhead reach, side bends, seated twists and chair squats. The webcam watches your body, **counts every repetition**, cheers you on and tells you when the form is off (*“Straighten your arms”*, *“Lift both shoulders together”*, *“Too fast”*). Also from the tray menu or Settings → Health. |
 | **Timer widget** | A small always-on-top window: status, time to the next water reminder and break, time at the desk, eye-control and webcam buttons. Drag it anywhere. |
 | **Fair timers** | Timers only count time at the desk: they pause while you are away and continue when you are back. Away 10+ minutes counts as a break and restarts the break / stand-up timers. |
 | **Phone calls** | With Windows Phone Link, an incoming call pauses music and video; music resumes after the call. |
@@ -112,6 +113,7 @@ Everything is in the Settings window. The same values live in `%APPDATA%\DeskPre
 | `camera_index` | 0 | Which webcam to use |
 | `water_reminder_minutes` | 60 | `0` = off |
 | `forced_break` | 90 / 10 | `work_minutes`, `break_minutes`, `enabled`, `allow_skip` |
+| `exercise` | 60 min | `enabled`, `every_minutes`, `auto_open` (open by itself, else ask), `reps` (8), `moves` (which exercises) |
 | `break_reminder_minutes` | 50 | A gentle “stand up” popup (`0` = off) |
 | `lock_after_away_minutes` | 0 | Lock Windows after being away this long (`0` = never) |
 | `gaze_stable_seconds` | 0.6 | How long you must look at a monitor before the cursor moves |
@@ -150,6 +152,8 @@ deskpresence/
   controller.py     presence state machine, breaks, water, gaze -> cursor, laptop sync
   vision.py         webcam + YuNet face detector + head-pose estimate, person detector, owner recognition
   eyetrack.py       MediaPipe iris tracking -> cursor (calibrated regression)
+  exercise.py       MediaPipe body landmarks -> exercise repetitions and form corrections
+  exercise_ui.py    the exercise window (webcam picture, count, feedback)
   phone.py          Bluetooth phone presence
   camshare.py       notices other apps that want the webcam
   calls.py          phone calls through Windows Phone Link

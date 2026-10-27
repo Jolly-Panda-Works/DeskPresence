@@ -8,7 +8,7 @@ import webbrowser
 import customtkinter as ctk
 from PIL import Image, ImageDraw
 
-from . import APP_AUTHOR, APP_NAME, APP_REPO, APP_VERSION, APP_WEBSITE, network, phone, winapi
+from . import APP_AUTHOR, APP_NAME, APP_REPO, APP_VERSION, APP_WEBSITE, exercise, network, phone, winapi
 from .i18n import is_rtl, set_language, t
 from .media import MODES
 from .tray import autostart_enabled, set_autostart
@@ -446,6 +446,17 @@ class SettingsWindow:
         self._slider(c, t("set.water"), "water_reminder_minutes", 0, 180, 5, unit=t("set.min"))
         self._slider(c, t("set.standup"), "break_reminder_minutes", 0, 120, 5, unit=t("set.min"))
         self._end(c)
+
+        c = self._card(t("set.exercise"), t("set.exercise_hint"))
+        self._row(c, "", lambda p: self._primary(p, t("set.ex_start"), self.ctrl.start_exercise, width=150))
+        self._info(c, "🤸 " + t("set.exercise_left"), "t_exercise")
+        self._switch(c, t("set.ex_enabled"), "exercise.enabled")
+        self._slider(c, t("set.ex_every"), "exercise.every_minutes", 15, 180, 15, unit=t("set.min"))
+        self._switch(c, t("set.ex_auto"), "exercise.auto_open", hint=t("set.ex_auto_hint"))
+        self._slider(c, t("set.ex_reps"), "exercise.reps", 3, 20, 1)
+        for key in exercise.ORDER:
+            self._switch(c, t(f"ex.name.{key}"), f"exercise.moves.{key}")
+        self._end(c)
         c = self._card(t("set.forced"), t("set.forced_hint"))
         self._switch(c, t("set.forced_on"), "forced_break.enabled")
         self._slider(c, t("set.work_minutes"), "forced_break.work_minutes", 15, 180, 5, unit=t("set.min"))
@@ -750,6 +761,8 @@ class SettingsWindow:
             else:
                 self._set_live("t_break", mins(tm["break_left"]))
             self._set_live("t_sit", mins(tm["sitting"]))
+            if "t_exercise" in self.live:
+                self._set_live("t_exercise", mins(tm["exercise_left"]))
         if "link_state" in self.live:
             if not self.cfg["network_enabled"]:
                 self._set_live("link_state", t("set.link_disabled"), MUTED)

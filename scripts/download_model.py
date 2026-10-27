@@ -4,6 +4,7 @@
   face_landmarker.task                 Google MediaPipe (Apache 2.0)   eye tracking
   efficientdet_lite0.tflite            Google MediaPipe (Apache 2.0)   presence without a visible face
   face_recognition_sface_2021dec.onnx  OpenCV Zoo SFace (Apache 2.0)   "only me" owner recognition
+  pose_landmarker_lite.task            Google MediaPipe (Apache 2.0)   counting desk exercises
 """
 import os
 import urllib.request
@@ -22,6 +23,9 @@ MODELS = {
     "face_recognition_sface_2021dec.onnx": (
         "https://github.com/opencv/opencv_zoo/raw/main/models/face_recognition_sface/"
         "face_recognition_sface_2021dec.onnx", 10_000_000),
+    "pose_landmarker_lite.task": (
+        "https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/1/"
+        "pose_landmarker_lite.task", 1_000_000),
 }
 
 if __name__ == "__main__":
