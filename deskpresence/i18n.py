@@ -223,11 +223,56 @@ STRINGS = {
     "set.camera_n": {"fa": "دوربین {n}", "en": "Camera {n}"},
     "set.preview": {"fa": "پیش‌نمایش", "en": "Preview"},
     "set.preview_off": {"fa": "وبکم خاموش است", "en": "Webcam is off"},
-    "set.preview_hint": {"fa": "کادر نارنجی یعنی چهره شما دیده می‌شود. تصویر ذخیره نمی‌شود.",
-                         "en": "An orange box means your face is seen. Nothing is saved."},
+    "set.preview_hint": {"fa": "کادر نارنجی یعنی شما دیده می‌شوید (چهره یا بدن). تصویر ذخیره نمی‌شود. "
+                               "تا وقتی این صفحه باز است وبکم روشن می‌ماند.",
+                         "en": "An orange box means you are seen (face or body). Nothing is saved. "
+                               "The webcam stays on while this page is open."},
     "set.camera_state": {"fa": "وضعیت وبکم", "en": "Webcam"},
     "set.cam_on": {"fa": "روشن", "en": "On"},
     "set.cam_off": {"fa": "خاموش", "en": "Off"},
+    "set.cam_waiting": {"fa": "خاموش، نگاه بعدی تا {s} ثانیه دیگر", "en": "Off, next look in {s} s"},
+    "set.camera_mode": {"fa": "وبکم", "en": "Webcam"},
+    "set.cm_interval": {"fa": "هر چند دقیقه یک نگاه", "en": "A look every few minutes"},
+    "set.cm_always": {"fa": "همیشه روشن", "en": "Always on"},
+    "set.camera_mode_hint": {"fa": "در حالت «هر چند دقیقه» وبکم خاموش است و فقط برای یک نگاه کوتاه روشن می‌شود. "
+                                   "تا وقتی با کیبورد یا موس کار می‌کنید اصلا روشن نمی‌شود. "
+                                   "حرکت موس با سر یا چشم فقط در حالت «همیشه روشن» کار می‌کند.",
+                             "en": "With “a look every few minutes” the webcam is off and only opens for a short "
+                                   "look; while you use the keyboard or mouse it does not open at all. "
+                                   "Moving the cursor with your head or eyes needs “always on”."},
+    "set.check_every": {"fa": "نگاه هر", "en": "Look every"},
+    "set.away_check": {"fa": "وقتی نیستید، نگاه هر", "en": "While away, look every"},
+    "set.away_check_hint": {"fa": "برای اینکه برگشتنتان را ببیند. کیبورد و موس هم بلافاصله کار می‌کنند.",
+                            "en": "To notice that you are back. The keyboard and mouse work at once too."},
+    "set.presence_by": {"fa": "حضور یعنی", "en": "You are here when"},
+    "set.by_body": {"fa": "بدن دیده شود", "en": "Your body is seen"},
+    "set.by_face": {"fa": "چهره دیده شود", "en": "Your face is seen"},
+    "set.presence_by_hint": {"fa": "«بدن» یعنی چرخاندن سر، نگاه به گوشی یا نشستن نیم‌رخ هم حضور حساب می‌شود.",
+                             "en": "“Body” means turning your head, looking at your phone or sitting sideways "
+                                   "still counts as here."},
+    "set.owner": {"fa": "فقط خودم", "en": "Only me"},
+    "set.owner_hint": {"fa": "مانیتورها فقط وقتی دوباره روشن می‌شوند که وبکم چهره شما را بشناسد. "
+                             "اگر کس دیگری کیبورد یا موس را بزند، صفحه‌ها بعد از چند ثانیه دوباره خاموش می‌شوند. "
+                             "برای امنیت واقعی «قفل ویندوز» را هم روشن کنید.",
+                       "en": "The monitors only come back on when the webcam recognises your face. If someone "
+                             "else touches the keyboard or mouse, the screens go dark again after a few seconds. "
+                             "For real security also turn on “Lock Windows”."},
+    "set.owner_only": {"fa": "فقط با حضور من روشن شود", "en": "Only I turn it back on"},
+    "set.owner_face": {"fa": "چهره من", "en": "My face"},
+    "set.owner_none": {"fa": "هنوز یاد گرفته نشده", "en": "Not taught yet"},
+    "set.owner_saved": {"fa": "ذخیره شده ({n} نمونه)", "en": "Saved ({n} samples)"},
+    "set.owner_learning": {"fa": "در حال یادگیری… به وبکم نگاه کنید", "en": "Learning… look at the webcam"},
+    "set.owner_teach": {"fa": "یاد بگیر", "en": "Teach my face"},
+    "set.owner_teach_hint": {"fa": "چند ثانیه تنها جلوی وبکم بنشینید و به آن نگاه کنید. فقط یک عدد ریاضی "
+                                   "از چهره ذخیره می‌شود، نه عکس.",
+                             "en": "Sit alone in front of the webcam for a few seconds and look at it. Only "
+                                   "numbers describing the face are saved, never a picture."},
+    "set.owner_forget": {"fa": "پاک کن", "en": "Forget"},
+    "owner.title": {"fa": "شناسایی صاحب کامپیوتر", "en": "Owner recognition"},
+    "owner.done": {"fa": "چهره شما ذخیره شد.", "en": "Your face was saved."},
+    "owner.failed": {"fa": "چهره به اندازه کافی دیده نشد. تنها و رو به وبکم بنشینید و دوباره امتحان کنید.",
+                     "en": "The face was not seen well enough. Sit alone, facing the webcam, and try again."},
+    "owner.unavailable": {"fa": "مدل شناسایی چهره پیدا نشد.", "en": "The face recognition model is missing."},
     "set.share": {"fa": "برنامه دیگری وبکم خواست", "en": "Another app wants the webcam"},
     "set.share_ask": {"fa": "بپرس", "en": "Ask"},
     "set.share_always": {"fa": "همیشه بده", "en": "Always give"},

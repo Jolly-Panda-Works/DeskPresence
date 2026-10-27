@@ -21,6 +21,9 @@ PRESENT, AWAY = "present", "away"
 LAPTOP = "laptop"
 MOUSE_OFF, MOUSE_MONITOR, MOUSE_EYES = "off", "monitor", "eyes"
 SLEEP_GAP_SECONDS = 120
+CAMERA_WARMUP = 1.5      # a webcam that was just opened needs a moment before its frames are useful
+AWAY_LOOK_SECONDS = 6    # interval mode, while away: how long each short look lasts
+ENROLL_SECONDS = 6       # "Teach my face" collects the face this long
 NETWORK_KEYS = ("network_enabled", "role", "port", "desktop_host", "token",
                 "forward_notifications", "dismiss_forwarded")
 
@@ -67,6 +70,16 @@ class Controller:
         self._asking = False
         self._lend = None
         self.camera_lent_to = None             # (registry key, app name) while another app has it
+        # interval mode: the webcam is off and only opens for a look every few minutes
+        self._check_until = None               # end of the current look (math.inf = until you are seen)
+        self._next_check_at = 0.0
+        self.camera_hold = False               # the settings preview keeps the webcam on
+        self._camera_failed = False
+        # only the owner turns the PC back on
+        self._identity_ok = None               # does the open webcam sensor support face recognition
+        self._owner_streak = 0
+        self._input_wake_at = None             # keyboard/mouse used while away: who is it?
+        self._enroll = None                    # "Teach my face" in progress
         self._lock = threading.RLock()
         self._stop = threading.Event()
         self._reopen = False
@@ -149,6 +162,11 @@ class Controller:
         self.monitors = winapi.list_monitors()
         if new["camera_index"] != old.get("camera_index"):
             self._reopen = True
+        if new["camera_mode"] != old.get("camera_mode") or new["check_every_minutes"] != old.get("check_every_minutes"):
+            self._check_until = None
+            self._next_check_at = 0.0  # look right away, then on the new schedule
+        if self.sensor is not None:
+            self.sensor.owner_faces = new["owner_faces"]
         if any(new.get(k) != old.get(k) for k in NETWORK_KEYS):
             log.info("Network settings changed, restarting the link")
             self._stop_network()
@@ -175,9 +193,25 @@ class Controller:
 
     # ------------------------------------------------------------ main loop
     @property
+    def interval_mode(self):
+        """The webcam only opens for a short look every few minutes (presence by webcam only)."""
+        return self.cfg["camera_mode"] == "interval" and self.cfg["presence_source"] in ("camera", "both")
+
+    @property
     def camera_wanted(self):
-        return (self.uses_camera and not self.paused and self.camera_lent_to is None
-                and (self.cfg["presence_source"] in ("camera", "both") or self.cfg["mouse_mode"] != MOUSE_OFF))
+        if not self.uses_camera or self.paused or self.camera_lent_to is not None:
+            return False
+        if self.camera_hold or self._enroll is not None:
+            return True
+        if self.interval_mode:
+            return self._check_until is not None
+        return self.cfg["presence_source"] in ("camera", "both") or self.cfg["mouse_mode"] != MOUSE_OFF
+
+    @property
+    def owner_lock(self):
+        """Only the owner's face may turn the PC back on (when it can be checked at all)."""
+        return (self.cfg["owner_only"] and bool(self.cfg["owner_faces"]) and self._identity_ok is not False
+                and self.uses_camera and self.camera_lent_to is None and not self._camera_failed)
 
     @property
     def phone_wanted(self):
@@ -217,8 +251,10 @@ class Controller:
                     self._reopen = False
                     self._close_sensor()
                     try:
-                        self.sensor = FaceSensor(self.cfg["camera_index"])
-                        self._last_face = time.monotonic()
+                        self.sensor = FaceSensor(self.cfg["camera_index"], self.cfg["owner_faces"])
+                        self._camera_failed = False
+                        self._identity_ok = self.sensor.supports_identity
+                        self._last_face = time.monotonic() + (CAMERA_WARMUP if self.interval_mode else 0.0)
                         self._set_status(self.state)
                     except Exception as e:
                         # usually another app (a video call) is holding the webcam
@@ -227,8 +263,10 @@ class Controller:
                             if not camshare.CameraShare._is_own(k))
                         log.warning("Camera unavailable (%s)%s", e, " - in use by another app" if busy else "")
                         self._set_status("camera_busy" if busy else "camera_error")
+                        self._camera_failed = True
                         camera_retry_at = t0 + 5
                 if self.sensor is not None:
+                    self.sensor.check_owner = self._enroll is not None or (self.state == AWAY and self.owner_lock)
                     obs = self.sensor.read()
                     if obs is None:
                         errors += 1
@@ -238,12 +276,14 @@ class Controller:
                     else:
                         errors = 0
             try:
+                if self._enroll is not None:
+                    self._enroll_step(obs, time.monotonic())
                 self._process(obs, time.monotonic())
             except Exception:
                 log.exception("process failed")
             if self.sensor is not None:
                 fps = self.cfg["camera_fps"]
-                if self.cfg["mouse_mode"] == MOUSE_EYES:
+                if self.cfg["mouse_mode"] == MOUSE_EYES and not self.interval_mode:
                     fps = max(fps, 15)  # eye control needs a smoother stream
                 period = 1.0 / max(1, fps)
             else:
@@ -397,19 +437,31 @@ class Controller:
     # ------------------------------------------------------------ presence
     def _process(self, obs, now):
         """One tick. obs is the webcam observation, or None when the webcam is not in use."""
+        self._interval_step(now)
         if obs is not None:
-            if obs.face:
+            # with "body", turning your head away (no face) still counts: the person detector sees you
+            seen = obs.person if self.cfg["presence_by"] == "body" else obs.face
+            if seen:
                 self._last_face = now
                 self._face_streak += 1
-                self._last_obs, self._last_obs_at = obs, now
             else:
                 self._face_streak = 0
+            if obs.face:
+                self._last_obs, self._last_obs_at = obs, now
+            self._owner_streak = self._owner_streak + 1 if obs.owner else 0
+            if seen and self.state == PRESENT and not self.break_active and self._check_until is not None:
+                self._end_check(now)  # you are here: the webcam goes off until the next look
+        # interval mode, between two looks: the last look saw you, so you are still here
+        between = (self.interval_mode and obs is None and self._check_until is None
+                   and self.camera_lent_to is None)
+        if between and self.state == PRESENT:
+            self._last_face = now
         phone = self.phone_near
         if phone:
             self._last_face = now
-        have_source = obs is not None or phone is not None
+        have_source = obs is not None or phone is not None or between
 
-        eyes = (obs is not None and self.cfg["mouse_mode"] == MOUSE_EYES
+        eyes = (obs is not None and self.cfg["mouse_mode"] == MOUSE_EYES and not self.interval_mode
                 and self.state == PRESENT and not self.break_active)
         if eyes:
             self._eye_features(now)
@@ -436,7 +488,7 @@ class Controller:
                     self._eye_hotkey()
                 if eyes:
                     self._eye_step(now)
-                elif obs is not None:
+                elif obs is not None and not self.interval_mode:
                     self._gaze_step(obs, now)
                 self._break_step(now)
                 self._water_step(now)
@@ -444,7 +496,15 @@ class Controller:
         else:
             back_input = self.cfg["wake_on_input"] and idle < 1.0
             back_phone = phone is True and self._phone_at_away is not True
-            if self._face_streak >= self.cfg["back_frames"] or back_input or back_phone:
+            if self.owner_lock:
+                back_seen = self._owner_streak >= self.cfg["back_frames"]
+                if back_input:
+                    back_input = False
+                    self._owner_input_check(now)
+                self._owner_input_timeout(now)
+            else:
+                back_seen = self._face_streak >= self.cfg["back_frames"]
+            if back_seen or back_input or back_phone:
                 self.come_back(local=True)
             elif self.cfg["lock_after_away_minutes"] > 0 and not self._locked \
                     and now - self._away_since >= self.cfg["lock_after_away_minutes"] * 60:
@@ -457,6 +517,100 @@ class Controller:
         if now - self._status_refresh_at >= 60:  # keeps "next break in X min" fresh
             self._status_refresh_at = now
             self._set_status(self.status)
+
+    # ------------------------------------------------------------ interval mode
+    def _interval_step(self, now):
+        """Opens the webcam for a look when one is due; it stays off in between."""
+        if not self.interval_mode:
+            self._check_until = None
+            return
+        if self._check_until is not None:
+            if now >= self._check_until:
+                self._end_check(now)
+            return
+        present = self.state == PRESENT
+        # a forced break needs to see that you left, so the webcam stays on while you sit there
+        if self.calibrating or (now < self._next_check_at and not (present and self.break_active)):
+            return
+        if present and not self.break_active and winapi.idle_seconds() < self.cfg["idle_guard_seconds"]:
+            self._next_check_at = now + self.cfg["check_every_minutes"] * 60  # you are typing: clearly here
+            return
+        self._start_check(now, None if present else AWAY_LOOK_SECONDS)
+
+    def _start_check(self, now, seconds):
+        """seconds=None: look until you are seen (or until you count as away)."""
+        if self._check_until is None:
+            log.debug("Webcam look started")
+        self._check_until = math.inf if seconds is None else max(self._check_until or 0.0, now + seconds)
+
+    def _end_check(self, now):
+        self._check_until = None
+        every = self.cfg["check_every_minutes"] * 60 if self.state == PRESENT else self.cfg["away_check_seconds"]
+        self._next_check_at = now + every
+
+    def next_check_seconds(self):
+        """Seconds to the next look in interval mode, None while looking or not in interval mode."""
+        if not self.interval_mode or self._check_until is not None:
+            return None
+        return max(0.0, self._next_check_at - time.monotonic())
+
+    # ------------------------------------------------------------ owner only
+    def _owner_input_check(self, now):
+        """Keyboard/mouse while away: Windows wakes the screens, the webcam checks who it is."""
+        if self._input_wake_at is None:
+            log.info("Input while away: checking for the owner")
+            self._input_wake_at = now
+            self._start_check(now, AWAY_LOOK_SECONDS + CAMERA_WARMUP)
+
+    def _owner_input_timeout(self, now):
+        if self._input_wake_at is None or now - self._input_wake_at < AWAY_LOOK_SECONDS + CAMERA_WARMUP:
+            return
+        self._input_wake_at = None
+        log.info("Not the owner: the screens stay off")
+        if self.cfg["turn_off_monitors"]:
+            winapi.monitors_off()
+
+    def teach_owner(self, done=None):
+        """Collects the owner's face for a few seconds; done(count) is called when finished."""
+        if not self.uses_camera:
+            self.popup(t("owner.title"), t("cal.no_camera"))
+            return
+        if self._enroll is None:
+            log.info("Learning the owner's face")
+            self._enroll = {"until": time.monotonic() + ENROLL_SECONDS + CAMERA_WARMUP, "feats": [], "done": done}
+
+    def forget_owner(self):
+        self.cfg.set("owner_faces", [])
+        if self.sensor is not None:
+            self.sensor.owner_faces = []
+        log.info("Owner face removed")
+
+    def _enroll_step(self, obs, now):
+        en = self._enroll
+        if self.sensor is not None and not self.sensor.supports_identity:
+            self._enroll = None
+            self.popup(t("owner.title"), t("owner.unavailable"))
+            if en["done"]:
+                en["done"](0)
+            return
+        if obs is not None and obs.face and self.sensor.last_feature is not None and obs.faces == 1:
+            en["feats"].append([round(float(v), 5) for v in self.sensor.last_feature])
+        if now < en["until"]:
+            return
+        self._enroll = None
+        feats = en["feats"]
+        if len(feats) < 5:
+            self.popup(t("owner.title"), t("owner.failed"))
+        else:
+            step = max(1, len(feats) // 12)
+            feats = feats[::step][:12]
+            self.cfg.set("owner_faces", feats)
+            if self.sensor is not None:
+                self.sensor.owner_faces = feats
+            log.info("Owner face saved (%d samples)", len(feats))
+            self.popup(t("owner.title"), t("owner.done"))
+        if en["done"]:
+            en["done"](len(feats) if len(feats) >= 5 else 0)
 
     # ------------------------------------------------------------ presence actions
     def _countdown_step(self, left):
@@ -481,6 +635,9 @@ class Controller:
             log.info("AWAY (local=%s)", local)
             self.state = AWAY
             self._away_since = time.monotonic()
+            self._check_until = None
+            self._next_check_at = self._away_since + self.cfg["away_check_seconds"]
+            self._input_wake_at = None
             self._phone_at_away = self.phone_near
             self._locked = False
             if self.cfg["pause_media"]:
@@ -503,6 +660,9 @@ class Controller:
             self.state = PRESENT
             now = time.monotonic()
             self._last_face = now
+            self._check_until = None
+            self._next_check_at = now + self.cfg["check_every_minutes"] * 60
+            self._input_wake_at = None
             # a long absence counts as a break: the break and stand-up timers start over.
             # Shorter absences only pause them (they did not count while you were away).
             if now - self._away_since >= self.cfg["timer_reset_away_minutes"] * 60:
@@ -537,6 +697,8 @@ class Controller:
         self._break_reminded = False
         self._water_asking = False
         self._last_face = self._last_tick = time.monotonic()
+        self._check_until = None
+        self._next_check_at = 0.0
         self._reopen = True  # the webcam handle does not survive sleep
         self._set_status(self.status)
 

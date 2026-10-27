@@ -11,6 +11,7 @@ deskpresence/_build_version.py
 version_info.txt
 SHA256SUMS.txt
 assets/*.task
+assets/*.tflite
 Output/
 Farsi.isl
 *.zip

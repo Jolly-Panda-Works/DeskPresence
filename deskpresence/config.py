@@ -34,8 +34,18 @@ DEFAULTS = {
     "idle_fallback_minutes": 5,
     "camera_index": 0,
     "camera_fps": 8,
-    "away_seconds": 10,          # no face for this long -> away
-    "back_frames": 3,            # consecutive frames with a face -> back
+    # "interval" = the webcam is off and only opens every check_every_minutes for a quick look;
+    # "always" = the webcam stays on (needed for the cursor to follow your head or eyes)
+    "camera_mode": "interval",
+    "check_every_minutes": 3,
+    "away_check_seconds": 20,    # interval mode, while away: a short look this often
+    # what counts as you: "body" = a person from any side (turning your head is fine), "face" = a face
+    "presence_by": "body",
+    # only the owner's face turns the PC back on (teach it in Settings -> Presence)
+    "owner_only": False,
+    "owner_faces": [],           # SFace features of the owner, saved by "Teach my face"
+    "away_seconds": 10,          # nobody seen for this long -> away
+    "back_frames": 3,            # consecutive frames with you in them -> back
     "idle_guard_seconds": 20,    # never go "away" if keyboard/mouse was used this recently
     "wake_on_input": True,       # touching the keyboard/mouse while away counts as "back"
     # before going away: a countdown on every monitor while the screens fade to black
